@@ -1,26 +1,85 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Paleta grimdark: piedra y ceniza, con brasa (hoguera) como único acento. */
+@theme {
+  --color-abyss: #0b0a09;
+  --color-ash: #14120f;
+  --color-stone: #1c1915;
+  --color-stone-edge: #2f2a23;
+  --color-bone: #e6ddcc;
+  --color-fog: #968c7e;
+  --color-ember: #d9782b;
+  --color-ember-bright: #f2a55a;
+  --color-ember-deep: #7a3510;
+  --color-gold: #c8a35e;
+  --color-blood: #c25247;
+
+  --font-display: var(--font-cinzel);
+  --font-sans: var(--font-alegreya-sans);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html {
+    color-scheme: dark;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    background: var(--color-abyss);
+    color: var(--color-bone);
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  ::selection {
+    background: var(--color-ember-deep);
+    color: var(--color-bone);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Esquinas biseladas: la forma base "facetada" de toda la UI. */
+@utility facet {
+  --cut: 10px;
+  clip-path: polygon(
+    var(--cut) 0,
+    100% 0,
+    100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%,
+    0 100%,
+    0 var(--cut)
+  );
+}
+
+@utility facet-sm {
+  --cut: 6px;
+}
+
+@layer components {
+  .field {
+    @apply w-full border border-stone-edge bg-ash px-3 py-3 text-base text-bone transition-colors outline-none placeholder:text-fog/60;
+  }
+
+  .field:focus {
+    border-color: var(--color-ember);
+    box-shadow: 0 1px 0 0 var(--color-ember);
+  }
+
+  .field[aria-invalid="true"] {
+    border-color: var(--color-blood);
+  }
+
+  .btn-ember {
+    @apply facet facet-sm flex w-full items-center justify-center px-4 py-3 font-display text-sm font-bold tracking-[0.18em] text-abyss uppercase transition;
+    background: linear-gradient(160deg, var(--color-ember-bright), var(--color-ember) 55%, var(--color-ember-deep));
+  }
+
+  .btn-ember:hover {
+    filter: brightness(1.08);
+  }
+
+  .btn-ember:disabled {
+    @apply cursor-wait opacity-60;
+  }
+
+  .btn-ghost {
+    @apply facet facet-sm flex w-full items-center justify-center border border-stone-edge bg-ash px-4 py-3 font-display text-sm tracking-[0.18em] text-fog uppercase transition hover:text-bone;
+  }
 }

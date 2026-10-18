@@ -22,7 +22,9 @@ Base de Datos: PostgreSQL 16 (en desarrollo: contenedor Docker `trackapp-db-dev`
 
 ORM: Prisma ORM 7.10.1 (versiones fijadas; NO actualizar a la 8.x sin consultar). Usa el generador `prisma-client` (cliente generado en `src/generated/prisma`, ignorado en git y regenerado en `postinstall`) y el driver adapter `@prisma/adapter-pg`. Configuración en `prisma7.config.ts` (nombre por defecto de Prisma 7.10).
 
-Autenticación: Auth.js (NextAuth) con estrategia de sesión basada en JWT.
+Autenticación: Auth.js (NextAuth) v5.0.0-beta.32 (fijada) con estrategia de sesión basada en JWT. Contraseñas con Argon2id (`@node-rs/argon2`, parámetros OWASP). Validación con Zod 4.
+
+Next.js 16 + Cache Components (`cacheComponents: true`): leer la sesión SIEMPRE dentro de un `<Suspense>`, nunca en el nivel superior de un layout. `middleware` se llama ahora `proxy.ts` (corre en Node.js).
 
 PWA: next-pwa (o solución nativa de Next.js) para manifest y service workers.
 
@@ -80,6 +82,7 @@ Cloudflare: Actuará solo como DNS y Proxy de seguridad (HTTPS).
 
 Desarrollo local (implementado):
 - `docker-compose.yml`: solo PostgreSQL 16 de desarrollo (`docker compose up -d`). Credenciales por defecto en `.env.example`; copiar a `.env`.
+- Variables requeridas (ver `.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST=true` (sin esta última Auth.js rechaza el login con `next start` y detrás de Nginx).
 - En Windows, Docker Desktop está instalado por usuario y `docker` puede no estar en el PATH de la terminal: usar `C:\Users\copor\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe`.
 
 6. Plan de Ejecución (Instrucciones para Claude Code)
@@ -99,12 +102,32 @@ Fase 1: Inicialización y Base de Datos — COMPLETADA
    - `prisma/seed.ts` (`npx prisma db seed`): asigna los ejercicios a usuarios existentes sin ejercicios.
    - Cliente Prisma singleton: `src/lib/prisma.ts`.
 
-Fase 2: Autenticación y Layout — SIGUIENTE
-5. Configura Auth.js (NextAuth) con credenciales (Email/Password).
-6. Asegúrate de implementar el trigger (vía API route o Server Action) que asigne los ejercicios semilla al momento de un registro exitoso.
-7. Crea el Layout principal (Mobile-first, diseño limpio para gimnasio) con la navegación inferior (Inicio, Calendario, Dashboard, Perfil).
+Fase 2: Autenticación y Layout — COMPLETADA
+[x] 5. Configura Auth.js (NextAuth) con credenciales (Email/Password).
+   - `src/auth.config.ts` (config compartida, sin Prisma: usada por el proxy) y `src/auth.ts` (provider Credentials).
+   - `src/proxy.ts`: chequeo optimista del JWT; redirige a /login (rutas públicas: /login, /registro, /salir).
+   - `src/lib/dal.ts` → `getCurrentUser()`: verificación real en el servidor. Usarla en páginas (dentro de Suspense) y en TODA Server Action.
+   - `/salir` (route handler): cierra sesiones cuyo usuario ya no existe (evita bucle de redirecciones).
+   - Registro: email + contraseña (mín. 8) + confirmación, con auto-login. Sin verificación de email (MVP).
+[x] 6. Asegúrate de implementar el trigger (vía API route o Server Action) que asigne los ejercicios semilla al momento de un registro exitoso.
+   - `src/lib/users.ts` → `createUserWithDefaults()`: crea el User y sus ejercicios en una transacción. Punto único de creación de usuarios (lo reutilizará el login con Google).
+   - Server Actions de auth en `src/actions/auth.ts` (login, register, logout) con `useActionState`.
+[x] 7. Crea el Layout principal (Mobile-first, diseño limpio para gimnasio) con la navegación inferior (Inicio, Calendario, Dashboard, Perfil).
+   - Rutas: grupo `(auth)` (/login, /registro) y grupo `(app)` (/, /calendario, /dashboard, /perfil) con `BottomNav`.
 
-Fase 3: Core CRUD y UI
+Estilo visual (aprobado por el usuario): grimdark low-poly inspirado en Dark Souls/RPG, sobrio y no chocante. Solo tema oscuro.
+- Paleta en `src/app/globals.css` (@theme): abyss/ash/stone (fondos), stone-edge (bordes), bone (texto), fog (texto secundario), ember (acento único: brasa de hoguera), gold (títulos), blood (errores).
+- Tipografías: Cinzel (`font-display`, títulos/etiquetas en mayúsculas) y Alegreya Sans (texto).
+- Formas: utilidades `facet` / `facet-sm` (esquinas biseladas); componentes `Panel`, `FormField`, `PageHeader`, `ComingSoon`; clases `.field`, `.btn-ember`, `.btn-ghost`.
+- Fondo `LowPolyBackdrop` (malla de triángulos determinista) e iconos facetados propios en `src/components/icons.tsx`.
+- Textos de la UI en español, con un toque temático leve ("Sendero sellado", "Avivando las brasas…") sin sacrificar claridad.
+
+Mejoras futuras acordadas:
+- Login con Google (próxima iteración): agregar provider, hacer `password` opcional (migración) y crear el usuario con `createUserWithDefaults()`.
+- Volver a la página solicitada (callbackUrl) tras el login; hoy siempre redirige a Inicio.
+- Límite de intentos de login (proponer junto al despliegue).
+
+Fase 3: Core CRUD y UI — SIGUIENTE
 8. Desarrolla las Server Actions y la interfaz (Páginas/Componentes) para gestionar los Ejercicios (CRUD).
 9. Desarrolla el creador de Rutinas (asignar ejercicios y ordenarlos).
 
