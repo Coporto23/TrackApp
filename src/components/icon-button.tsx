@@ -17,7 +17,14 @@ const TONES = {
 
 // Botón cuadrado de 44px (tamaño táctil mínimo) con solo icono. Si es de tipo
 // submit, se deshabilita mientras su formulario se envía.
-export function IconButton({ label, children, tone = "default", className = "", ...props }: IconButtonProps) {
+export function IconButton({
+  label,
+  children,
+  tone = "default",
+  className = "",
+  disabled,
+  ...props
+}: IconButtonProps) {
   const { pending } = useFormStatus();
   const isSubmit = (props.type ?? "submit") === "submit";
 
@@ -25,8 +32,8 @@ export function IconButton({ label, children, tone = "default", className = "", 
     <button
       aria-label={label}
       title={label}
-      disabled={isSubmit && pending}
-      className={`flex h-11 w-11 shrink-0 items-center justify-center transition-colors disabled:opacity-40 ${TONES[tone]} ${className}`}
+      disabled={disabled || (isSubmit && pending)}
+      className={`flex h-11 w-11 shrink-0 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${TONES[tone]} ${className}`}
       {...props}
     >
       {children}

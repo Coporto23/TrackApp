@@ -2,26 +2,32 @@
 
 import { useActionState, useState } from "react";
 import { createExercise, restoreExercise, type ExerciseFormState } from "@/actions/exercises";
-import { addRoutineExercises, type RoutineFormState } from "@/actions/routines";
-import { CheckIcon, PlusIcon, SearchIcon } from "@/components/icons";
-import { Modal } from "@/components/modal";
 import type { ExerciseItem } from "@/lib/data/exercises";
+import { CheckIcon, PlusIcon, SearchIcon } from "./icons";
+import { Modal } from "./modal";
+
+type AddState = { error?: string; ok?: boolean } | undefined;
+// Acción que agrega los ejercicios seleccionados (llegan como `exerciseIds`).
+type AddAction = (prev: AddState, formData: FormData) => Promise<AddState>;
 
 const normalize = (text: string) =>
   text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
-// Selector para agregar ejercicios a una rutina. Tiene dos vistas en el mismo
-// modal: elegir de la lista, o crear un ejercicio nuevo sin salir de la rutina
-// (queda en el arsenal y vuelve a la lista ya marcado).
+// Selector para agregar ejercicios (a una rutina o a la sesión de un día). Tiene
+// dos vistas en el mismo modal: elegir de la lista, o crear un ejercicio nuevo
+// sin salir (queda en el arsenal y vuelve a la lista ya marcado).
 export function ExercisePickerDialog({
-  routineId,
   exercises,
   alreadyAdded,
+  addAction,
+  hiddenFields,
   onClose,
 }: {
-  routineId: string;
   exercises: ExerciseItem[];
   alreadyAdded: Set<string>;
+  addAction: AddAction;
+  // Campos que identifican el destino, p. ej. { routineId } o { sessionId }.
+  hiddenFields: Record<string, string>;
   onClose: () => void;
 }) {
   const [view, setView] = useState<"pick" | "create">("pick");
@@ -37,7 +43,8 @@ export function ExercisePickerDialog({
     <Modal title={view === "pick" ? "Agregar ejercicios" : "Nuevo ejercicio"} onClose={onClose}>
       {view === "pick" ? (
         <PickView
-          routineId={routineId}
+          addAction={addAction}
+          hiddenFields={hiddenFields}
           exercises={exercises}
           alreadyAdded={alreadyAdded}
           query={query}
@@ -63,7 +70,8 @@ export function ExercisePickerDialog({
 }
 
 function PickView({
-  routineId,
+  addAction,
+  hiddenFields,
   exercises,
   alreadyAdded,
   query,
@@ -73,7 +81,8 @@ function PickView({
   onCreateNew,
   onClose,
 }: {
-  routineId: string;
+  addAction: AddAction;
+  hiddenFields: Record<string, string>;
   exercises: ExerciseItem[];
   alreadyAdded: Set<string>;
   query: string;
@@ -84,8 +93,8 @@ function PickView({
   onClose: () => void;
 }) {
   const [state, action, pending] = useActionState(
-    async (prev: RoutineFormState, formData: FormData) => {
-      const result = await addRoutineExercises(prev, formData);
+    async (prev: AddState, formData: FormData) => {
+      const result = await addAction(prev, formData);
       if (result?.ok) onClose();
       return result;
     },
@@ -97,7 +106,9 @@ function PickView({
 
   return (
     <form action={action} className="space-y-3">
-      <input type="hidden" name="routineId" value={routineId} />
+      {Object.entries(hiddenFields).map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
       {selected.map((id) => (
         <input key={id} type="hidden" name="exerciseIds" value={id} />
       ))}

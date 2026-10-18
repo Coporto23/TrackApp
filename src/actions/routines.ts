@@ -12,6 +12,8 @@ export type RoutineFormState =
   | {
       error?: string;
       ok?: boolean;
+      // Rutina recién creada (permite seleccionarla, p. ej. desde el calendario).
+      routine?: { id: string; name: string };
       // Texto enviado, para no perderlo si hubo error.
       name?: string;
     }
@@ -42,14 +44,18 @@ export async function createRoutine(
 
   if (await findRoutineByName(user.id, name)) return { error: DUPLICATE_ERROR, name };
 
+  let routine: { id: string; name: string };
   try {
-    await prisma.routine.create({ data: { name, userId: user.id } });
+    routine = await prisma.routine.create({
+      data: { name, userId: user.id },
+      select: { id: true, name: true },
+    });
   } catch (error) {
     if (isUniqueViolation(error)) return { error: DUPLICATE_ERROR, name };
     throw error;
   }
   refresh();
-  return { ok: true };
+  return { ok: true, routine };
 }
 
 export async function renameRoutine(

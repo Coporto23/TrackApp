@@ -1,16 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import {
+  addRoutineExercises,
+  removeRoutineExercise,
+  reorderRoutineExercises,
+} from "@/actions/routines";
+import { ExercisePickerDialog } from "@/components/exercise-picker-dialog";
 import { IconButton } from "@/components/icon-button";
 import { EditIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { Panel } from "@/components/panel";
+import { SortableExerciseList } from "@/components/sortable-exercise-list";
 import type { ExerciseItem } from "@/lib/data/exercises";
 import type { RoutineDetail } from "@/lib/data/routines";
 import { RoutineNameDialog } from "../routine-name-dialog";
 import { DeleteRoutineDialog } from "./delete-routine-dialog";
-import { ExercisePickerDialog } from "./exercise-picker-dialog";
-import { SortableExerciseList } from "./sortable-exercise-list";
 
 type DialogState = "rename" | "delete" | "add" | null;
 
@@ -63,8 +68,11 @@ export function RoutineEditor({
             <SortableExerciseList
               // Remontar cuando el servidor devuelve otra lista/orden.
               key={routine.exercises.map((e) => e.id).join(",")}
-              routineId={routine.id}
+              dndId={`routine-${routine.id}`}
               items={routine.exercises}
+              onReorder={(ids) => reorderRoutineExercises(routine.id, ids)}
+              removeAction={removeRoutineExercise}
+              removeLabel={(name) => `Quitar ${name} de la rutina`}
             />
             <p className="mt-3 text-center text-xs text-fog">
               Arrastra desde la manija ⠿ para reordenar.
@@ -77,7 +85,8 @@ export function RoutineEditor({
       {dialog === "delete" && <DeleteRoutineDialog routine={routine} onClose={close} />}
       {dialog === "add" && (
         <ExercisePickerDialog
-          routineId={routine.id}
+          addAction={addRoutineExercises}
+          hiddenFields={{ routineId: routine.id }}
           exercises={availableExercises}
           alreadyAdded={new Set(routine.exercises.map((e) => e.exerciseId))}
           onClose={close}

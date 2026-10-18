@@ -37,6 +37,7 @@ model Exercise {
 
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   routineExercises RoutineExercise[]
+  sessionExercises SessionExercise[]
   sets             Set[]
 
   @@unique([userId, name])
@@ -78,12 +79,30 @@ model WorkoutSession {
   originRoutineId String?
   createdAt       DateTime @default(now())
 
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  originRoutine Routine? @relation(fields: [originRoutineId], references: [id], onDelete: SetNull)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originRoutine Routine?          @relation(fields: [originRoutineId], references: [id], onDelete: SetNull)
+  exercises     SessionExercise[]
   sets          Set[]
 
-  @@index([userId, date])
+  // Un entrenamiento por día por usuario.
+  @@unique([userId, date])
   @@index([originRoutineId])
+}
+
+// Ejercicios de una sesión: se copian de la rutina al crearla y luego se
+// editan solo para ese día (la plantilla no cambia salvo que se guarde en ella).
+model SessionExercise {
+  id         String @id @default(cuid())
+  sessionId  String
+  exerciseId String
+  order      Int
+
+  session  WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exercise Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, exerciseId])
+  @@index([sessionId, order])
+  @@index([exerciseId])
 }
 
 model Set {
@@ -92,7 +111,10 @@ model Set {
   exerciseId String
   setNumber  Int
   reps       Int
-  weight     Decimal    @db.Decimal(6, 2)
+  // kg/lbs: `weight` numérico y `level` null. Unidad "level": `level` es texto
+  // corto ("5", "B", "A2") y `weight` null (no es una carga graficable).
+  weight     Decimal?   @db.Decimal(6, 2)
+  level      String?    @db.VarChar(10)
   weightUnit WeightUnit @default(kg)
   createdAt  DateTime   @default(now())
 
