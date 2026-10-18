@@ -79,6 +79,10 @@
     @apply cursor-wait opacity-60;
   }
 
+  .btn-danger {
+    @apply facet facet-sm flex w-full items-center justify-center bg-blood px-4 py-3 font-display text-sm font-bold tracking-[0.18em] text-bone uppercase transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60;
+  }
+
   .btn-ghost {
     @apply facet facet-sm flex w-full items-center justify-center border border-stone-edge bg-ash px-4 py-3 font-display text-sm tracking-[0.18em] text-fog uppercase transition hover:text-bone;
   }

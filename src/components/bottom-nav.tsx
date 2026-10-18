@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ComponentType, SVGProps } from "react";
+import { Suspense, type ComponentType, type SVGProps } from "react";
 import { BonfireIcon, CalendarIcon, ChartIcon, HelmIcon } from "./icons";
 
 type NavItem = {
@@ -21,9 +21,21 @@ const NAV_ITEMS: NavItem[] = [
 // Ejercicios y Rutinas se abren desde Inicio, así que cuentan como esa pestaña.
 const HOME_SECTIONS = ["/ejercicios", "/rutinas"];
 
+// usePathname() es dato de runtime en rutas dinámicas (/rutinas/[id]): con Cache
+// Components debe ir dentro de <Suspense>. El fallback es la barra sin pestaña activa.
 export function BottomNav() {
-  const pathname = usePathname();
+  return (
+    <Suspense fallback={<NavBar pathname={null} />}>
+      <CurrentNavBar />
+    </Suspense>
+  );
+}
 
+function CurrentNavBar() {
+  return <NavBar pathname={usePathname()} />;
+}
+
+function NavBar({ pathname }: { pathname: string | null }) {
   return (
     <nav
       aria-label="Navegación principal"
@@ -32,9 +44,10 @@ export function BottomNav() {
       <ul className="mx-auto grid max-w-md grid-cols-4">
         {NAV_ITEMS.map(({ href, label, Icon }) => {
           const active =
-            href === "/"
+            pathname !== null &&
+            (href === "/"
               ? pathname === "/" || HOME_SECTIONS.some((s) => pathname.startsWith(s))
-              : pathname.startsWith(href);
+              : pathname.startsWith(href));
           return (
             <li key={href}>
               <Link

@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  // Solo en `next dev`: arriba a la derecha para no tapar la navegación inferior.
+  devIndicators: { position: "top-right" },
   turbopack: {
     rules: {
       "*.css": {

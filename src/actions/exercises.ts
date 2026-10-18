@@ -5,7 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { getCurrentUser } from "@/lib/dal";
 import { findExerciseByName } from "@/lib/data/exercises";
 import { prisma } from "@/lib/prisma";
-import { exerciseIdSchema, exerciseNameSchema } from "@/lib/validation/exercise";
+import { idSchema, nameSchema } from "@/lib/validation/common";
 
 export type ExerciseFormState =
   | {
@@ -13,6 +13,8 @@ export type ExerciseFormState =
       // Hay un ejercicio archivado con ese nombre: se ofrece restaurarlo.
       archivedMatch?: { id: string; name: string };
       ok?: boolean;
+      // Ejercicio recién creado (permite seleccionarlo, p. ej. al armar una rutina).
+      exercise?: { id: string; name: string };
       // Texto enviado, para no perderlo si hubo error.
       name?: string;
     }
@@ -30,7 +32,7 @@ export async function createExercise(
 ): Promise<ExerciseFormState> {
   const user = await getCurrentUser();
   const raw = String(formData.get("name") ?? "");
-  const parsed = exerciseNameSchema.safeParse(raw);
+  const parsed = nameSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.issues[0].message, name: raw };
   const name = parsed.data;
 
@@ -40,14 +42,18 @@ export async function createExercise(
   }
   if (existing) return { error: DUPLICATE_ERROR, name };
 
+  let exercise: { id: string; name: string };
   try {
-    await prisma.exercise.create({ data: { name, userId: user.id } });
+    exercise = await prisma.exercise.create({
+      data: { name, userId: user.id },
+      select: { id: true, name: true },
+    });
   } catch (error) {
     if (isUniqueViolation(error)) return { error: DUPLICATE_ERROR, name };
     throw error;
   }
   refresh();
-  return { ok: true };
+  return { ok: true, exercise };
 }
 
 export async function renameExercise(
@@ -55,8 +61,8 @@ export async function renameExercise(
   formData: FormData,
 ): Promise<ExerciseFormState> {
   const user = await getCurrentUser();
-  const id = exerciseIdSchema.safeParse(formData.get("id"));
-  const parsed = exerciseNameSchema.safeParse(formData.get("name") ?? "");
+  const id = idSchema.safeParse(formData.get("id"));
+  const parsed = nameSchema.safeParse(formData.get("name") ?? "");
   if (!id.success) return { error: "Ejercicio no válido" };
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const name = parsed.data;
@@ -87,7 +93,7 @@ export async function renameExercise(
 
 async function setArchived(formData: FormData, archived: boolean) {
   const user = await getCurrentUser();
-  const id = exerciseIdSchema.safeParse(formData.get("id"));
+  const id = idSchema.safeParse(formData.get("id"));
   if (!id.success) return;
 
   await prisma.exercise.updateMany({

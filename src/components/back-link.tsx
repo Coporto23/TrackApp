@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BackIcon } from "./icons";
 
-export function BackLink({ href, label }: { href: "/"; label: string }) {
+export function BackLink({ href, label }: { href: "/" | "/rutinas"; label: string }) {
   return (
     <Link
       href={href}

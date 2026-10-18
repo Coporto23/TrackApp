@@ -64,6 +64,8 @@ model RoutineExercise {
   routine  Routine  @relation(fields: [routineId], references: [id], onDelete: Cascade)
   exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
 
+  // Un ejercicio aparece como máximo una vez por rutina.
+  @@unique([routineId, exerciseId])
   @@index([routineId, order])
   @@index([exerciseId])
 }

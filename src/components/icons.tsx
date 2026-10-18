@@ -148,3 +148,32 @@ export function CloseIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 6.5h16M9.5 6.5V4h5v2.5" />
+      <path d="m6 6.5 1 14h10l1-14" />
+      <path d="M10 10.5v6M14 10.5v6" />
+    </Icon>
+  );
+}
+
+// Manija para arrastrar: seis rombos.
+export function GripIcon(props: IconProps) {
+  return (
+    <Icon {...props} stroke="none" fill="currentColor">
+      {[6, 12, 18].flatMap((y) =>
+        [9, 15].map((x) => <path key={`${x}-${y}`} d={`m${x} ${y - 1.4} 1.4 1.4-1.4 1.4-1.4-1.4Z`} />),
+      )}
+    </Icon>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m9 5 7 7-7 7" />
+    </Icon>
+  );
+}

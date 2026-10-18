@@ -35,6 +35,7 @@ Repositorio: https://github.com/Coporto23/TrackApp (rama `main`).
 | Auth | **Auth.js (next-auth) 5.0.0-beta.32** (fijada) | Sesión JWT, provider Credentials. |
 | Hash | **Argon2id** (`@node-rs/argon2` 2.2.2) | Parámetros OWASP: 19 MiB, t=2, p=1. |
 | Validación | **Zod 4.6** | Esquemas en `src/lib/validation/`. |
+| Drag & drop | **@dnd-kit** core 6.3.1 / sortable 10.0.0 / modifiers 9.0.0 / utilities 3.2.2 (fijadas) | Reordenar ejercicios de una rutina (puntero + teclado). |
 | PWA | next-pwa o solución nativa de Next.js | Pendiente (Fase 5). |
 | Infra | Docker Compose + Nginx/Traefik en VPS Hetzner, Cloudflare DNS/Proxy | Pendiente (Fase 6). |
 
@@ -51,7 +52,11 @@ Repositorio: https://github.com/Coporto23/TrackApp (rama `main`).
 - Sin grupo muscular (decisión del usuario: lista simple alfabética con buscador).
 
 ### 3.2 Rutinas y Calendario
-- Las rutinas son **plantillas** (ej. "Día Pecho") con ejercicios ordenados. Nombre único por usuario.
+- Las rutinas son **plantillas** (ej. "Día Pecho") con ejercicios ordenados. Nombre único por usuario (sin distinguir mayúsculas).
+- Un ejercicio aparece **como máximo una vez por rutina** (`@@unique([routineId, exerciseId])`).
+- Los ejercicios archivados se **ocultan** de las rutinas (el vínculo se conserva; al restaurarlos vuelven a su posición).
+- **Eliminar una rutina** es definitivo y pide confirmación. Las sesiones ya entrenadas con ella y sus series se conservan (`originRoutineId` queda en null).
+- Al armar una rutina se pueden **crear ejercicios nuevos** sin salir de ella (quedan en el arsenal del usuario).
 - El usuario selecciona un día en el calendario, carga la plantilla y puede agregar/quitar ejercicios sobre la marcha durante la sesión.
 
 ### 3.3 Métricas de registro
@@ -67,14 +72,14 @@ Repositorio: https://github.com/Coporto23/TrackApp (rama `main`).
 
 ## 4. Modelo de Datos (implementado en `prisma/schema.prisma`)
 
-Todas las entidades usan id `cuid()` y `createdAt`. Migración aplicada: `init`.
+Todas las entidades usan id `cuid()` y `createdAt`. Migraciones aplicadas: `init`, `routine_exercise_unique`.
 
 | Entidad | Campos | Restricciones / relaciones |
 |---|---|---|
 | **User** | id, email, password (hash Argon2id), createdAt | email único |
 | **Exercise** | id, name, userId, archivedAt?, createdAt | único (userId, name); cascada al borrar User |
 | **Routine** | id, name, userId, createdAt | único (userId, name); cascada al borrar User |
-| **RoutineExercise** | id, routineId, exerciseId, order (Int) | cascada al borrar su Routine o Exercise; índice (routineId, order) |
+| **RoutineExercise** | id, routineId, exerciseId, order (Int) | único (routineId, exerciseId); cascada al borrar su Routine o Exercise; índice (routineId, order). El orden puede tener huecos: ordenar por `order` asc. |
 | **WorkoutSession** | id, userId, date (`@db.Date`, solo fecha), originRoutineId?, createdAt | originRoutineId null = entrenamiento libre; al borrar la rutina queda en null |
 | **Set** | id, sessionId, exerciseId, setNumber, reps, weight (`Decimal(6,2)`), weightUnit (enum `kg`/`lbs`/`level`, def. `kg`), createdAt | cascada al borrar su sesión; **Set → Exercise es `NoAction`** |
 
@@ -102,7 +107,9 @@ src/
   auth.ts                  Auth.js completo: provider Credentials (usa Prisma + argon2)
   actions/                 Server Actions ("use server")
     auth.ts                login, register, logout
-    exercises.ts           createExercise, renameExercise, archiveExercise, restoreExercise
+    exercises.ts           createExercise (devuelve el ejercicio creado), renameExercise, archiveExercise, restoreExercise
+    routines.ts            createRoutine, renameRoutine, deleteRoutine, addRoutineExercises,
+                           removeRoutineExercise, reorderRoutineExercises(routineId, orderedIds)
   app/
     layout.tsx             Raíz: fuentes, metadata, viewport, LowPolyBackdrop
     globals.css            Tema (paleta, fuentes), utilidades facet, .field, .btn-*
@@ -111,6 +118,9 @@ src/
     (app)/                 Rutas autenticadas con BottomNav
       page.tsx             Inicio (accesos a Ejercicios/Rutinas, "Entrenar hoy" pendiente)
       ejercicios/          CRUD de ejercicios (lista + modal)
+      rutinas/             Listado de rutinas + modal de nombre (crear/renombrar)
+        [id]/              Detalle: lista ordenable (dnd-kit), selector de ejercicios con
+                           "crear nuevo", eliminar con confirmación
       calendario/, dashboard/   Placeholders ("Sendero sellado") hasta Fases 4/5
       perfil/              Datos de la cuenta + cerrar sesión
     api/auth/[...nextauth]/route.ts   Handlers de Auth.js
@@ -124,7 +134,8 @@ src/
     seed-user-exercises.ts seedUserExercises(db, userId) idempotente (acepta transacción)
     default-exercises.ts   Lista de los 26 ejercicios semilla
     data/exercises.ts      Lecturas de ejercicios del usuario (getMyExercises, findExerciseByName)
-    validation/            Esquemas Zod (auth.ts, exercise.ts)
+    data/routines.ts       getMyRoutines, getMyRoutine(id) (solo ejercicios activos), findRoutineByName
+    validation/            Esquemas Zod: auth.ts, common.ts (nameSchema, idSchema compartidos)
   generated/prisma/        Cliente generado (NO editar, NO versionar)
 ```
 
@@ -134,6 +145,7 @@ src/
 3. **Server Actions**: cada acción llama a `getCurrentUser()` y filtra por `userId` en la consulta (`updateMany({ where: { id, userId } })`), de modo que un id ajeno simplemente no afecta nada.
 
 ### 5.3 Patrones obligatorios con Cache Components (Next 16)
+- `params` de rutas dinámicas y `usePathname()` también son datos de runtime: pasar la promesa `params` a un componente dentro de `<Suspense>` y hacer `await` ahí; `BottomNav` lee el pathname dentro de su propio `<Suspense>` (fallback: barra sin pestaña activa).
 - Leer la sesión **siempre dentro de un `<Suspense>`**, nunca en el nivel superior de un layout/página (sería error de build y bloquearía el shell estático). Patrón: la página renderiza el encabezado estático y un componente async interno dentro de `<Suspense fallback=…>`.
 - No se usa `'use cache'` por ahora: los datos son dinámicos por usuario. Tras una mutación, la acción llama a **`refresh()`** (`next/cache`) para refrescar el router. Si en el futuro se cachean datos con `'use cache'` + `cacheTag`, usar `updateTag` en las acciones y nunca poner datos sensibles en claves/tags.
 
@@ -160,11 +172,15 @@ src/
 - Fondo `LowPolyBackdrop`: malla de triángulos determinista + resplandor de brasa inferior.
 
 ### 6.3 Componentes (`src/components/`)
-`Panel` (tarjeta biselada con borde), `PageHeader` (título dorado + separador con rombo), `FormField`, `Modal` (sobre `<dialog>` nativo), `IconButton` (44px táctil, se deshabilita al enviar), `BackLink`, `BottomNav`, `ComingSoon`, `LowPolyBackdrop`, `icons.tsx` (iconos facetados propios: hoguera, calendario, gráfico, yelmo, emblema, +, editar, archivar, restaurar, buscar, atrás, check, cerrar).
+`Panel` (tarjeta biselada con borde), `PageHeader` (título dorado + separador con rombo), `FormField`, `Modal` (sobre `<dialog>` nativo), `IconButton` (44px táctil, se deshabilita al enviar), `BackLink`, `BottomNav`, `ComingSoon`, `LowPolyBackdrop`, `icons.tsx` (iconos facetados propios: hoguera, calendario, gráfico, yelmo, emblema, +, editar, archivar, restaurar, buscar, atrás, check, cerrar, papelera, manija, chevron). Botones: `.btn-ember` (principal), `.btn-ghost` (secundario/cancelar), `.btn-danger` (acciones destructivas). Checkbox temático: rombo ember (ver selector de ejercicios).
 
 ### 6.4 Convenciones UX
 - **Pantallas de gestión: el listado es protagonista.** Botón "+" en la cabecera del listado; **crear y editar se hacen en un modal con botones Cancelar / Aceptar** (no inputs incrustados en la página). El modal cierra con Cancelar, Esc o clic fuera; en error se mantiene abierto mostrando el mensaje y conservando lo escrito.
-- Acciones reversibles (archivar) son de un toque, sin confirmación; lo archivado queda en una sección plegable "Archivados" con opción de restaurar.
+- Acciones reversibles (archivar, quitar un ejercicio de una rutina) son de un toque, sin confirmación; lo archivado queda en una sección plegable "Archivados" con opción de restaurar.
+- Acciones irreversibles (eliminar rutina) piden confirmación en un modal con `.btn-danger`.
+- Crear un elemento **no navega** a otra pantalla: el modal se cierra y el elemento aparece en el listado (decisión del usuario).
+- Dentro de un modal de selección se puede crear el elemento faltante sin salir (vista "crear" dentro del mismo modal, precargada con lo buscado; al aceptar vuelve a la selección con el nuevo ya marcado).
+- Reordenar: arrastrar desde la manija ⠿ (solo la manija tiene `touch-action: none`, así no choca con el scroll); también con teclado (espacio + flechas).
 - Buscadores ignoran tildes y mayúsculas; orden alfabético con `Intl.Collator("es")`.
 - Objetivos táctiles ≥ 44px. Navegación inferior fija con safe-area (`env(safe-area-inset-bottom)`).
 - Textos en español, con un toque temático leve ("Sendero sellado", "Avivando las brasas…", "Tu arsenal") sin sacrificar claridad. Lenguaje neutro en género hacia el usuario ("Saludos", no "Bienvenido").
@@ -173,6 +189,8 @@ src/
 ### 6.5 Gotchas de UI
 - `Modal`: no cerrar el `<dialog>` en el cleanup del efecto. En Strict Mode (dev) React monta/desmonta/remonta y ese `close()` dispara `onClose`, cerrando el modal al abrirlo. Se abre con `if (!dialog.open) dialog.showModal()` y se cierra desmontándolo.
 - El modal se monta solo mientras está abierto (estado `dialog` en el padre), así su formulario parte limpio cada vez.
+- Inputs `sr-only` (checkbox oculto) dentro de listas con scroll: el contenedor de la fila debe ser `relative`; si no, el input absoluto se posiciona respecto del `<dialog>`, alarga su scroll y lo desplaza al enfocarlo.
+- Si una clase Tailwind nueva no se aplica en `next dev` (el `className` está pero la regla CSS no existe), es caché persistente de Turbopack: detener el servidor, borrar `.next` y reiniciar.
 
 ---
 
@@ -209,11 +227,11 @@ Seguir este orden estricto. Confirmar con el usuario al terminar cada paso.
 - [x] 6. Asignación de ejercicios semilla al registrarse (`createUserWithDefaults`, transacción) + auto-login.
 - [x] 7. Layout mobile-first con navegación inferior (Inicio, Calendario, Dashboard, Perfil) y estilo grimdark low-poly.
 
-### Fase 3: Core CRUD y UI — EN CURSO
+### Fase 3: Core CRUD y UI — ✅ COMPLETADA
 - [x] 8. CRUD de Ejercicios (`/ejercicios`): listado alfabético con buscador, "+" abre modal "Nuevo ejercicio", lápiz abre modal "Renombrar ejercicio", archivar/restaurar, oferta de restaurar al crear un nombre archivado, aislamiento por usuario verificado.
-- [ ] 9. **SIGUIENTE:** Creador de Rutinas (`/rutinas`): crear/renombrar/eliminar rutinas, asignar ejercicios y ordenarlos. Aplicar la convención UX 6.4 (listado + modal). Los ejercicios archivados no se muestran en las rutinas. Habilitar la tarjeta "Rutinas" de Inicio (hoy muestra "Próximamente").
+- [x] 9. Creador de Rutinas (`/rutinas`, `/rutinas/[id]`): crear/renombrar/eliminar (con confirmación), agregar ejercicios desde un selector multi-selección con buscador (y crear ejercicios nuevos desde ahí), quitar, reordenar arrastrando o con teclado. Aislamiento por usuario verificado.
 
-### Fase 4: Tracker de Entrenamiento
+### Fase 4: Tracker de Entrenamiento — SIGUIENTE
 - [ ] 10. Interfaz del Calendario.
 - [ ] 11. Vista de "Sesión Activa": instanciar una rutina en el día actual y registrar rápidamente las series (serie, repeticiones, peso + unidad).
 
@@ -229,6 +247,7 @@ Seguir este orden estricto. Confirmar con el usuario al terminar cada paso.
 - **Login con Google** (próxima iteración): agregar provider, hacer `password` opcional (migración) y crear el usuario con `createUserWithDefaults()` (find-or-create por email).
 - Volver a la página solicitada (`callbackUrl`) tras el login; hoy siempre redirige a Inicio.
 - Límite de intentos de login (proponer junto al despliegue).
+- Selector de ejercicios: mostrar el ejercicio recién creado al inicio de la lista (hoy queda marcado en su posición alfabética).
 - Revisar las 5 vulnerabilidades "high" que reporta `npm audit` en dependencias de terceros (no aplicar `--force` sin revisar).
 
 ---
@@ -238,6 +257,7 @@ Seguir este orden estricto. Confirmar con el usuario al terminar cada paso.
 - Antes de dar un paso por terminado: `npx tsc --noEmit`, `npm run lint`, `npm run build`.
 - **Pruebas E2E con Playwright** (navegador real, viewport móvil 390×844): se ejecutan desde el directorio temporal de Claude (no están en el repo ni son dependencia del proyecto). Cubren registro/login/logout, CRUD de ejercicios con modales y aislamiento entre usuarios (un usuario B no puede modificar ejercicios de A falsificando el id).
   - Levantar el servidor en el puerto 3100 y correr la suite **en `next dev` y en `next start`** (hay bugs que solo aparecen en uno de los dos, p. ej. Strict Mode).
+  - Antes de interactuar tras un `reload()`/`goto()`, esperar la hidratación (`waitForLoadState("networkidle")`): el HTML del servidor ya muestra los datos, pero los eventos (teclado, arrastre) solo funcionan cuando React tomó el control.
   - Usuarios de prueba con email `e2e-…@trackapp.local`; **borrarlos al terminar** (primero sus `WorkoutSession`, luego el `User`).
   - En Windows, detener la tarea no siempre mata el proceso `node` hijo: liberar el puerto 3100 matando el proceso que escucha en él.
 - Si en el futuro se quiere una suite E2E versionada, proponerlo al usuario (agregaría Playwright como devDependency).
@@ -250,6 +270,7 @@ Seguir este orden estricto. Confirmar con el usuario al terminar cada paso.
 - `npm run dev`: servidor de desarrollo (http://localhost:3000).
 - `npm run build` + `npm run start`: build y servidor de producción local.
 - `npx prisma migrate dev --name <nombre>`: crear y aplicar una migración.
+  - Si falla con "environment is non-interactive" (pasa cuando hay advertencias, p. ej. agregar un `@@unique`): verificar que la advertencia no aplica, crear `prisma/migrations/<UTC yyyymmddHHMMSS>_<nombre>/migration.sql` con `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` y aplicar con `npx prisma migrate deploy` + `npx prisma generate`.
 - `npx prisma generate`: regenerar el cliente (también corre en `postinstall`).
 - `npx prisma db seed`: asignar ejercicios base a usuarios sin ejercicios.
 - `npx prisma studio`: explorar la BD.
