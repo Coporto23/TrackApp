@@ -19,20 +19,20 @@
 | | 9. Creador de rutinas | ✅ Finalizado |
 | 4. Tracker | 10. Calendario | ✅ Finalizado |
 | | 11. Registro de series | ✅ Finalizado (integrado en el calendario) |
-| 5. Dashboard y PWA | 12. Gráfico de progresión de carga máxima | ⏭️ Siguiente |
-| | 13. PWA instalable | Pendiente |
+| 5. Dashboard y PWA | 12. Dashboard de progresión | ✅ Finalizado |
+| | 13. PWA instalable | ⏭️ Siguiente |
 | 6. Docker VPS | 14. Dockerfile de producción | Pendiente (solo al final) |
 | | 15. `docker-compose.prod.yml` + Nginx/Traefik | Pendiente (solo al final) |
 
-**Commits en `main`**: `b052645` init · `4d591c1` Prisma + seeding · `5afe2f0` auth + layout · `3d95d53` ejercicios · `7a3f369` rutinas. Los pasos 10 y 11 se commitean junto con esta reorganización de la documentación.
+**Commits en `main`**: `b052645` init · `4d591c1` Prisma + seeding · `5afe2f0` auth + layout · `3d95d53` ejercicios · `7a3f369` rutinas · `035077e` calendario + series (pasos 10–11) · dashboard (paso 12).
 
 ---
 
 ## Pendientes y decisiones abiertas
 
-- **¿Botón "Editar rutina" en la tarjeta del día?** Hoy la plantilla se actualiza desde el día ("Actualizar plantilla…"); renombrarla o editarla directamente requiere ir a Rutinas. *Pendiente de respuesta del usuario.*
-- **Dashboard (paso 12)**: definir cómo tratar las series en "nivel" con letras (no graficables como carga) y si se grafica por unidad (kg / lbs / nivel numérico).
 - **Mejoras futuras acordadas**:
+  - Dashboard: tarjeta de **récords personales** (excluida del paso 12 por el usuario).
+  - Dashboard: alguna forma de **graficar la progresión en niveles** (hoy solo aparecen en la tabla).
   - Login con Google (próxima iteración): provider de Google, `password` opcional (migración) y creación con `createUserWithDefaults()` (buscar o crear por email).
   - Volver a la página solicitada (`callbackUrl`) tras el login; hoy siempre va a Inicio.
   - Límite de intentos de login (proponer junto al despliegue).
@@ -154,3 +154,39 @@
   - **Dev server tras migrar**: el `npm run dev` del usuario quedó con el cliente Prisma viejo en memoria ("Unknown field `level`"). Se le pidió reiniciarlo y se validó en producción mientras tanto.
 - E2E del calendario: **42 comprobaciones OK** (semana, asignación, plantilla, series, filtros, "última vez", gestos, aislamiento de sesiones y series entre usuarios). Rutinas y ejercicios sin regresiones.
 - Documentación reorganizada: `CLAUDE.md` (reglas y contexto), `ESPECIFICACIONES.md` (técnica) y `bitacora.md` (este archivo).
+
+### Paso 12 — Dashboard (planificación)
+- **Decisión (Usuario)**: **no** agregar un botón "Editar rutina" en la tarjeta del día por ahora (cierra la pregunta del paso 10).
+- **Objetivo (Usuario)**: ver gráficamente si se progresa en cada ejercicio, comparando la carga de antes con la de ahora, con rangos de **1 mes, 6 meses, 1 año, 2 años** y más.
+- **Decisiones (Usuario)**:
+  - Vistas: **carga máxima**, **1RM estimado**, **volumen**, **series por semana** y **constancia**. **Récords personales** queda fuera por ahora.
+  - Gráficos **por ejercicio**, con la posibilidad de **comparar varios** a la vez (p. ej. Press de Banca + Press Inclinado).
+  - Selector de unidad **kg / lbs** con conversión.
+  - Las series en **nivel** no se grafican (no son una medida comparable). Al elegir "nivel" en el registro se muestra un aviso que lo explica. Graficar niveles queda como mejora futura.
+  - **Tabla de registro** al final con la información en duro, donde **sí se ven los niveles**.
+  - **Constancia** como calendario mensual ordenado (lunes a domingo) con el **detalle del día al tocarlo**.
+  - Diseño de **tarjetas apiladas** (maqueta B), aprobado tras revisar dos rondas de maquetas en el navegador.
+  - **Recharts** como librería de gráficos (fijada en 3.10.1).
+  - Hasta **4 ejercicios** a la vez. La paleta cálida propuesta (ember, oro, hueso, óxido) no pasó la validación de accesibilidad (ember y oro se confunden); el usuario eligió una **paleta validada apagada**: brasa `#d06e24`, acero `#4d8fd1`, oro viejo `#a99236`, malva `#b4659f`.
+- **Decisiones (Técnica)**, detalladas en `ESPECIFICACIONES.md` § 5.2: 1RM con Epley y solo series de 1–12 reps; volumen por semana (1M) o por mes (resto); rango por defecto 6M; ejercicios elegidos en la URL (`?e=`); rango y unidad en `localStorage`; la tabla muestra cada peso en su unidad registrada; el selector lista solo ejercicios con historial (incluidos los archivados); sin cambios al modelo de datos.
+- **Revisión de la especificación** (revisor independiente): se resolvieron como *Técnica* los ejercicios solo con niveles (sí dibujan línea en "series por semana"), los periodos sin series (valen 0) y la carga máxima de un día con unidades mezcladas (la más pesada en kg, mostrada en su unidad).
+- **Decisión (Usuario)**: en la constancia, un día pasado con entrenamiento asignado y sin series tiene un estado propio **"no realizado"**.
+- El usuario aprobó la especificación y pidió proceder con el desarrollo.
+
+### Paso 12 — Dashboard (desarrollo)
+- Implementado según `ESPECIFICACIONES.md` § 5.2: filtros (hasta 4 ejercicios, rango 1M–Todo, kg/lbs), tarjetas de carga máxima, 1RM estimado, volumen y series por semana con "antes → ahora", constancia mensual con detalle del día y estados (entrenado, planificado, no realizado, descanso), tabla de registro con niveles y aviso de "nivel" en el registro de series. Sin cambios al modelo de datos.
+- **Problema**: la paleta cálida aprobada (ember, oro, hueso, óxido) **no pasó la validación** de accesibilidad (ember y oro se confunden incluso con visión normal). Se mostró la comparación al usuario y eligió una **paleta validada apagada** (brasa, acero, oro viejo, malva).
+- **Problema**: la selección inicial elegía el último ejercicio registrado aunque fuera solo de niveles (sin gráficos de carga). **Solución (Técnica)**: el último con series de peso; si no hay, el último en general.
+- **Problema**: en las capturas, volumen y series mostraban caídas y variaciones falsas (+159%) por periodos incompletos (el primero, cortado por el rango, y el mes en curso). **Solución (Técnica)**: los gráficos por periodo parten del primer periodo completo y "antes → ahora" compara solo periodos completos.
+- **Refactor**: `useToday` pasó de `week-view.tsx` a `src/lib/hooks.ts` para compartirlo con el dashboard.
+- **Entorno**: Docker Desktop y la BD estaban apagados; se iniciaron (`docker compose up -d`). El dev server del usuario (puerto 3000) no estaba corriendo, así que las pruebas en dev usaron un `next dev` propio en el 3100, ya detenido.
+- **Validación**: `tsc`, `lint` y `build` OK. Cálculos: 27 comprobaciones unitarias (`tsx`). E2E del dashboard (viewport 390×844, ~14 meses de historial sembrado): **todas OK en `next dev` y en `next start`**. E2E del calendario sin regresiones. Capturas revisadas. Usuarios `e2e-…` borrados.
+- Revisado por el usuario en su `npm run dev`.
+
+### Paso 12 — Ajustes tras la revisión del usuario
+- **Feedback (Usuario)**: "1 issue" en el indicador de Next.js. **No se pudo reproducir**: se recorrieron todas las páginas en `next dev` (usuario vacío, con ~14 meses de historial y con datos como los de su cuenta) sin issues en el indicador ni advertencias en consola o servidor. *Pendiente*: que el usuario comparta el texto del issue.
+- **Feedback (Usuario)**: agregar un **rango de fechas personalizado**. **Decisión (Usuario)**: 6.º botón "Fechas" en el rango que abre un modal Desde / Hasta. Implementado (ver `ESPECIFICACIONES.md` § 5.2); la unidad pasó a la fila de abajo para que los 6 botones tengan ≥ 44 px *(técnica)*.
+- **Decisión (Usuario)**: datos de prueba en su cuenta (`viper.9936@…`), con un 3.er ejercicio para cubrir las 3 tendencias: **Press de Banca sube** (60 → 75 kg), **Cruce de Poleas baja** (30 → 15 kg) y **Press Inclinado con Mancuernas se mantiene** (24 kg). Lunes y jueves del 20 abr al 15 oct 2026: **51 sesiones, 459 series**, como "Entrenamiento libre". Se omitió el 12 oct (ya tenía un entrenamiento suyo). El script `seed-demo.mjs` (scratchpad de Claude) guarda los ids y con `--undo` borra solo lo insertado.
+- **Validación**: `tsc`, `lint`, `build` OK; 36 comprobaciones unitarias; E2E del dashboard (con rango personalizado) **OK en `next dev` y `next start`**; usuarios `e2e-…` borrados.
+- **Feedback (Usuario)**: al cambiar de pestaña volvía Press de Banca como predeterminado y se perdían los gráficos elegidos. **Causa**: la selección vivía solo en la URL (`?e=`), que la barra inferior no conserva, y sin `?e=` se elegía un ejercicio por defecto. **Decisión (Usuario)**: sin ejercicio predeterminado y recordar la selección junto con el rango y las opciones. **Solución (Técnica)**: cookie `trackapp-dashboard-exercises` leída por el servidor; se eliminó la selección por defecto. E2E nuevas: sin selección inicial, volver desde Calendario y recargar conservan ejercicios, rango y unidad. OK en dev (contra el `npm run dev` del usuario en :3000) y en `next start`; el indicador de Next no mostró issues.
+- **Cierre**: el usuario aprobó el paso 12 y pidió commit + push.

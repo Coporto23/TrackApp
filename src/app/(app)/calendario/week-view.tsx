@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState } from "react";
 import { BackIcon, ChevronRightIcon, PlusIcon } from "@/components/icons";
 import {
   addDays,
   dayOfMonth,
   formatLongDate,
   formatWeekRange,
-  localToday,
 } from "@/lib/dates";
+import { useToday } from "@/lib/hooks";
 import type { ExerciseItem } from "@/lib/data/exercises";
 import type { RoutineSummary } from "@/lib/data/routines";
 import type { DaySession, WeekSession } from "@/lib/data/sessions";
@@ -21,10 +21,6 @@ const SWIPE_THRESHOLD = 50;
 const dayHref = (date: string) => `/calendario?d=${date}`;
 const weekdayShort = new Intl.DateTimeFormat("es-CL", { weekday: "short", timeZone: "UTC" });
 const shortDay = (iso: string) => weekdayShort.format(new Date(`${iso}T00:00:00Z`)).replace(".", "");
-
-// "Hoy" solo se conoce en el navegador; en el servidor es null (sin resaltar).
-const noopSubscribe = () => () => {};
-const useToday = () => useSyncExternalStore(noopSubscribe, localToday, () => null);
 
 // Semana en vertical (lunes a domingo). Cada día muestra su entrenamiento como
 // una tarjeta (estilo agenda); la del día seleccionado se despliega con el detalle.

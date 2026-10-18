@@ -72,3 +72,38 @@ export const dayOfMonth = (iso: string) => toUtcDate(iso).getUTCDate();
 // "12 oct"
 export const formatShortDate = (iso: string) =>
   dayMonth.format(toUtcDate(iso)).replace(/\.$/, "").replace(/ de /g, " ");
+
+// Suma meses manteniendo el día si existe (31 ene + 1 mes = 28/29 feb).
+export function addMonths(iso: string, months: number): string {
+  const date = toUtcDate(iso);
+  const day = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, lastDay));
+  return toIsoDate(date);
+}
+
+// "2026-10-01" para cualquier día de octubre de 2026.
+export const startOfMonth = (iso: string) => `${iso.slice(0, 7)}-01`;
+
+// Días del mes que contiene `iso`.
+export function monthDays(iso: string): string[] {
+  const first = startOfMonth(iso);
+  const count = new Date(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)), 0)).getUTCDate();
+  return Array.from({ length: count }, (_, i) => addDays(first, i));
+}
+
+const monthLong = new Intl.DateTimeFormat("es-CL", { month: "long", year: "numeric", timeZone: "UTC" });
+const weekdayAbbr = new Intl.DateTimeFormat("es-CL", { weekday: "short", timeZone: "UTC" });
+// "octubre de 2026"
+export const formatMonthLong = (iso: string) => monthLong.format(toUtcDate(iso));
+// "jue"
+export const formatWeekdayShort = (iso: string) => weekdayAbbr.format(toUtcDate(iso)).replace(".", "");
+
+// "12 abr – 18 oct 2026" (o "28 dic 2025 – 4 ene 2026" si cruza de año).
+export function formatDateRange(from: string, to: string) {
+  const year = (iso: string) => iso.slice(0, 4);
+  const start = formatShortDate(from) + (year(from) === year(to) ? "" : ` ${year(from)}`);
+  return `${start} – ${formatShortDate(to)} ${year(to)}`;
+}

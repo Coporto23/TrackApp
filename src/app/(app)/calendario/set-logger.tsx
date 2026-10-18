@@ -240,6 +240,12 @@ function SetFields({
         </label>
         {children}
       </div>
+      {isLevel && (
+        <p className="text-xs leading-snug text-fog">
+          Nivel: para máquinas con niveles o placas sin peso indicado («5», «B»). Estas series no aparecen en los
+          gráficos de carga; sí en el registro del dashboard.
+        </p>
+      )}
       {message && (
         <p role="alert" className="text-xs text-blood">
           {message}

@@ -18,6 +18,7 @@
 | Validación | Zod | 4.6.7 | Esquemas en `src/lib/validation/`. |
 | Drag & drop | `@dnd-kit/core` / `sortable` / `modifiers` / `utilities` | 6.3.1 / 10.0.0 / 9.0.0 / 3.2.2 (fijadas) | Reordenar ejercicios (puntero + teclado). |
 | Dev | `tsx`, `dotenv`, ESLint 9 (`eslint-config-next`) | — | `tsx` ejecuta el seed. |
+| Gráficos | Recharts | 3.10.1 (fijada) | Dashboard. Prop `responsive` (sin `ResponsiveContainer`), animaciones desactivadas. |
 | PWA | next-pwa o solución nativa | — | Pendiente (paso 13). |
 | Infra | Docker Compose + Nginx/Traefik (Hetzner), Cloudflare | — | Pendiente (Fase 6). |
 
@@ -45,6 +46,7 @@ src/
     sessions.ts              createSession, deleteSession, addSessionExercises, removeSessionExercise,
                              reorderSessionExercises, saveSessionToRoutine
     sets.ts                  addSet, updateSet, deleteSet
+    dashboard.ts             loadDayDetail (detalle de un día de la constancia)
   app/
     layout.tsx               Raíz: fuentes, metadata, viewport, LowPolyBackdrop
     globals.css              Tema (paleta, fuentes), utilidades facet, .field, .btn-*
@@ -55,7 +57,7 @@ src/
       rutinas/               Listado + modal de nombre
         [id]/                Detalle: lista ordenable, selector de ejercicios, eliminar
       calendario/            Semana vertical, tarjetas por día, detalle del día, registro de series
-      dashboard/             Placeholder ("Sendero sellado") hasta el paso 12
+      dashboard/             Filtros, 4 tarjetas de progresión (Recharts), constancia mensual y registro
       perfil/                Datos de la cuenta + cerrar sesión
     api/auth/[...nextauth]/  Handlers de Auth.js
     salir/route.ts           Cierra sesiones huérfanas (usuario borrado) sin bucle de redirección
@@ -67,9 +69,11 @@ src/
     password.ts              hashPassword / verifyPassword (Argon2id)
     seed-user-exercises.ts   seedUserExercises(db, userId), idempotente, acepta transacción
     default-exercises.ts     Los 26 ejercicios semilla
-    constants.ts             Compartidas cliente/servidor: FREE_SESSION_TITLE, WEIGHT_UNITS, WEIGHT_UNIT_LABELS
+    constants.ts             Compartidas cliente/servidor: FREE_SESSION_TITLE, WEIGHT_UNITS, WEIGHT_UNIT_LABELS, SERIES_COLORS
+    progress.ts              Cálculos puros del dashboard (conversión, Epley, periodos, antes→ahora, constancia)
+    hooks.ts                 Hooks cliente: useToday, useStoredChoice (localStorage con respaldo en memoria)
     dates.ts                 Fechas "YYYY-MM-DD" con aritmética UTC y formatos es-CL
-    data/                    Lecturas (server-only): exercises.ts, routines.ts, sessions.ts
+    data/                    Lecturas (server-only): exercises.ts, routines.ts, sessions.ts, dashboard.ts
     validation/              Zod: auth.ts, common.ts (nameSchema, idSchema), set.ts
   generated/prisma/          Cliente generado (NO editar, NO versionar)
 ```
@@ -162,7 +166,7 @@ Todas las entidades usan id `cuid()`; las principales tienen `createdAt`.
 | `/rutinas` | Listado con nombre y nº de ejercicios; "+" → modal "Nueva rutina". |
 | `/rutinas/[id]` | Título, renombrar (modal), eliminar (confirmación). Lista ordenable (manija ⠿ o teclado), ✕ para quitar, "+" → selector multi-selección con buscador y **"Crear ejercicio nuevo"** dentro del modal. |
 | `/calendario?d=YYYY-MM-DD` | Ver 5.1. Sin `d` (o fecha inválida) redirige a hoy según el navegador. |
-| `/dashboard` | Placeholder hasta el paso 12. |
+| `/dashboard?e=id1,,id3` | Progresión por ejercicio, constancia y registro. Ver 5.2. |
 | `/perfil` | Email, "Miembro desde", cerrar sesión. |
 
 ### 5.1 Calendario
@@ -175,6 +179,86 @@ Todas las entidades usan id `cuid()`; las principales tienen `createdAt`.
   - Series registradas ("1 · 8 reps × 82,5 kg"); tocar una la abre para editar o eliminar.
   - Formulario "Serie N": Reps · Peso/Nivel · Unidad (`<select>` kg/lbs/nivel) · "+".
   - Al pie, si difiere de la rutina: enlace discreto "Actualizar plantilla «…» con este día…".
+
+### 5.2 Dashboard
+
+> Diseño acordado con el usuario el 2026-10-18 (maquetas revisadas en el navegador) e implementado en el paso 12. Las decisiones marcadas *(técnica)* son de Claude y el usuario puede revisarlas.
+
+**Propósito**: responder "¿realmente estoy progresando en este ejercicio?" comparando gráficamente la carga de antes con la de ahora, por ejercicio y en distintos rangos de tiempo.
+
+**Alcance**: cuatro tarjetas **por ejercicio** (carga máxima, 1RM estimado, volumen, series por semana), una vista **global** (constancia) y una **tabla de registro**. Queda fuera: récords personales (iteración futura) y graficar niveles (mejora futura).
+
+**Diseño general — tarjetas apiladas (maqueta B)**: una sola página que se recorre bajando con el dedo, en este orden:
+1. Filtros (fijos arriba de las tarjetas, no flotantes).
+2. Carga máxima · 3. 1RM estimado · 4. Volumen · 5. Series por semana.
+6. Constancia.
+7. Registro (tabla).
+
+#### Filtros (aplican a las tarjetas 2–5 y a la tabla)
+- **Ejercicios**: fichas con un rombo de color y ✕ para quitarlas; "+ Agregar" abre un selector multi-selección con buscador. **Máximo 4 a la vez** (al llegar a 4, el resto queda deshabilitado con el motivo).
+  - El selector lista solo ejercicios **con al menos una serie registrada**, incluidos los archivados (con la nota "archivado") *(técnica)*. Sin "crear nuevo" (no tiene sentido sin historial).
+  - Un ejercicio cuyas series en el rango son **solo de nivel** se muestra con **rombo hueco** y la nota "nivel · sin carga": no dibuja línea en las tarjetas de carga (carga máxima, 1RM, volumen), pero **sí en series por semana** (cuenta series, no carga) y aparece en la tabla *(técnica)*.
+  - **Sin selección predeterminada** (decisión del usuario): la primera vez el dashboard parte vacío, con el aviso "Elige uno o más ejercicios con «Agregar»…" (las tarjetas y la tabla no se muestran; la constancia sí).
+  - **La selección se recuerda** (decisión del usuario): al recargar o volver desde otra pestaña quedan los mismos ejercicios. Se guarda en la cookie `trackapp-dashboard-exercises` (`path=/dashboard`, 1 año) que el servidor lee cuando la URL no trae `?e=`, así se muestra sin parpadeo *(técnica)*. Ids ajenos o inexistentes se descartan.
+- **Rango**: control segmentado `1M · 6M · 1A · 2A · TODO · 📅` (por defecto **6M** *(técnica)*). Se calcula hacia atrás desde "hoy" del navegador; "Todo" parte de la primera serie de los ejercicios elegidos.
+  - **Rango personalizado** (decisión del usuario, 2026-10-18): el botón con icono de calendario ("Fechas") abre un modal **Desde / Hasta** (selector de fecha nativo, Cancelar / Aceptar). Valida que ambas existan, Desde ≤ Hasta y Hasta ≤ hoy (error en el modal sin cerrarlo). Activo, bajo los botones se muestra "◆ 29 may – 11 sept 2026 ✕": tocar las fechas las edita y ✕ vuelve a 6M. Se recuerda en `localStorage` como `YYYY-MM-DD..YYYY-MM-DD` *(técnica)*.
+  - Agrupa como el preset de largo similar *(técnica)*: hasta 45 días como 1M, hasta 200 días como 6M y más como 1A. "Antes → ahora" por periodo ignora un último periodo que el rango corte.
+- **Unidad**: `KG · LBS` (por defecto kg), en la fila bajo el rango. Las series en lbs y kg se convierten con **1 lb = 0,45359237 kg** para compararse en la misma línea. Los valores se muestran con 1 decimal como máximo y coma decimal.
+- Estado: los ejercicios elegidos viven en la URL (`/dashboard?e=id1,,id3`) y en la cookie de arriba; rango, fechas personalizadas y unidad se recuerdan en `localStorage` *(técnica)*.
+
+#### Colores de las series (hasta 4 — decisión del usuario)
+La paleta cálida aprobada al inicio (ember, oro, hueso, óxido) **no pasó la validación** de accesibilidad: ember y oro se confunden incluso con visión normal. El usuario eligió la paleta **validada y apagada** (pasa luminosidad, croma, daltonismo y contraste ≥ 3:1 sobre `stone`):
+
+| Orden | Nombre | Hex |
+|---|---|---|
+| 1 | brasa | `#d06e24` |
+| 2 | acero | `#4d8fd1` |
+| 3 | oro viejo | `#a99236` |
+| 4 | malva | `#b4659f` |
+
+El color sigue al ejercicio (posición de su ficha); quitar una ficha no repinta las demás *(técnica: el color se asigna en el primer hueco libre)*. Se usan solo en gráficos y en el rombo de las fichas/tabla; los textos siguen en `bone`/`fog`. La leyenda son las propias fichas; el tooltip repite el color.
+
+#### Tarjetas de progresión (por ejercicio)
+Cada tarjeta: título (Cinzel), resumen **"antes → ahora"** por ejercicio en la cabecera y el gráfico. Al tocar un punto/barra aparece un tooltip con fecha y valores. Solo consideran series en **kg/lbs**.
+
+| Tarjeta | Valor | Agregación | Gráfico |
+|---|---|---|---|
+| **Carga máxima** | Mayor peso de una serie | Por entrenamiento (día) | Línea por ejercicio |
+| **1RM estimado** | Epley: `peso × (1 + reps/30)`; con 1 rep = el peso | Máximo del día, solo series de **1 a 12 reps** *(técnica: Epley pierde precisión con más reps)* | Línea por ejercicio |
+| **Volumen** | Σ peso × reps | Por **semana** (lunes–domingo) en 1M; por **mes** en 6M, 1A, 2A y Todo *(técnica: legibilidad en el celular)* | Barras agrupadas por ejercicio |
+| **Series por semana** | Nº de series (**incluye las de nivel**) | Por semana en 1M y 6M; en 1A, 2A y Todo, **promedio semanal por mes** *(técnica)* | Línea por ejercicio |
+
+- **Eje temporal continuo** *(técnica)*: en volumen y series por semana, las semanas/meses sin series del ejercicio valen **0** (el descanso se ve como descanso) y el "promedio semanal por mes" divide por todas las semanas del mes (en el mes en curso, solo las transcurridas). Carga máxima y 1RM solo tienen puntos en los días con series (la línea une los puntos). Los gráficos por periodo parten del **primer periodo completo** del rango (uno cortado por el inicio se vería como una caída falsa); con "Todo", del periodo de la primera serie *(técnica)*.
+- **"Antes → ahora"**: primer valor del rango → último valor del rango, con la variación en % (en brasa si sube, en `fog` si baja o se mantiene). Con menos de dos puntos: "—". En volumen y series compara el primer y el último periodo **completo** con datos (sin la semana/mes en curso) *(técnica)*.
+- Estado vacío por tarjeta: "Sin series en este rango" (o "Elige un ejercicio" si no hay fichas).
+
+#### Constancia (global, todos los entrenamientos)
+- **Calendario mensual** de lunes a domingo (como el calendario de la app), con ‹ › para cambiar de mes; inicia en el mes actual.
+- Estados del día (con leyenda bajo el calendario):
+  - **Entrenado** (tiene al menos una serie): fondo brasa con rombo.
+  - **Planificado** (hoy o futuro, con entrenamiento asignado sin series): borde punteado.
+  - **No realizado** (día pasado con entrenamiento asignado y sin series) — decisión del usuario: punteado apagado con una marca propia (✕ pequeña en `fog`). Su detalle dice "No realizado · sin series" con el enlace al calendario.
+  - **Descanso** (sin entrenamiento): apagado.
+  - Hoy con el número en ember.
+- Los indicadores cuentan **solo días entrenados** (con series).
+- **Al tocar un día** se muestra su detalle debajo del calendario: "JUE 16 OCT · DÍA PECHO", "N ejercicios · M series", la lista de ejercicios con su nº de series y su carga máxima (o el nivel más alto registrado *(técnica: el último en registrarse)*), y el enlace "Abrir en el calendario ›" (`/calendario?d=…`). Al abrir, queda seleccionado hoy (o el último día entrenado del mes visible).
+- Tres indicadores bajo el calendario: **entrenamientos en el mes**, **promedio por semana** (en el mes visible) y **semanas seguidas** con al menos un entrenamiento (contando hacia atrás desde la semana actual; si la semana actual aún no tiene, desde la anterior).
+- No depende de los filtros de ejercicio, rango ni unidad.
+
+#### Registro (tabla)
+- Información "en duro" de los ejercicios elegidos dentro del rango, **agrupada por día** (más reciente primero): cabecera con la fecha y la rutina del día; una fila por ejercicio con su rombo de color, las series como `peso×reps` separadas por ` · ` y la carga máxima del día a la derecha.
+- **Los niveles sí aparecen** (`B×12 · B×10 · C×8`) con la marca "nivel".
+- Pesos en la unidad registrada por la serie (es información en duro, sin convertir) *(técnica)*. La "carga máxima del día" (aquí y en el detalle de la constancia) es la serie más pesada comparando en kg, **mostrada en su unidad registrada**; si el día solo tiene niveles, el último nivel registrado con la marca "nivel".
+- Muestra 10 días y "Ver más" agrega 10 más.
+
+#### Aviso de "nivel" en el registro de series (calendario)
+Mientras la unidad elegida sea "nivel", bajo el formulario de la serie se muestra un texto breve y discreto: para qué sirve (máquinas con niveles o placas sin peso, como "5" o "B") y que esas series no aparecen en los gráficos de carga, sí en la tabla del dashboard. Sin ventana emergente.
+
+#### Implementación *(técnica)*
+- **Recharts 3.10.1** (fijada), aprobada por el usuario. Componentes de gráfico en el cliente (`"use client"`), tematizados con la paleta (ejes `fog`, grilla `stone-edge`, tooltip con `Panel`).
+- Lecturas en `src/lib/data/dashboard.ts` (`server-only`, `getCurrentUser()`, filtro por `userId`): series crudas por sesión de los ejercicios elegidos (ids validados y filtrados por usuario) y resumen de sesiones para la constancia. El detalle de un día de la constancia se lee bajo demanda verificando la pertenencia.
+- Cálculos (conversión, Epley, agrupación por semana/mes, "antes → ahora", rachas) en un módulo puro compartido `src/lib/progress.ts`, sin dependencias de servidor, para poder probarlos aislados.
+- Sin cambios al modelo de datos ni migraciones.
 
 ---
 
@@ -195,7 +279,7 @@ Todas las entidades usan id `cuid()`; las principales tienen `createdAt`.
 | `ExercisePickerDialog` | Selector multi-selección con buscador y vista "Crear ejercicio nuevo"; recibe la acción (`addAction`) y los campos ocultos del destino (`{ routineId }` o `{ sessionId }`). |
 | `icons.tsx` | Iconos facetados propios: hoguera, calendario, gráfico, yelmo, emblema, +, editar, archivar, restaurar, buscar, atrás, check, cerrar, papelera, manija, chevron. |
 
-Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos), `session-details.tsx` (tarjeta desplegada), `set-logger.tsx` (registro de series), `assign-routine-dialog.tsx`, `delete-session-dialog.tsx`, `update-template-dialog.tsx`.
+Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos), `session-details.tsx` (tarjeta desplegada), `set-logger.tsx` (registro de series + aviso de nivel), `assign-routine-dialog.tsx`, `delete-session-dialog.tsx`, `update-template-dialog.tsx`; `dashboard/dashboard-view.tsx` (filtros y tarjetas), `progress-chart.tsx` (línea y barras temáticas con tooltip), `exercise-select-dialog.tsx` (comparar, máx. 4), `custom-range-dialog.tsx` (Desde / Hasta), `consistency-card.tsx` (calendario mensual + detalle), `log-table.tsx` (registro por día).
 
 ---
 
@@ -262,6 +346,7 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
 - **Caché de Turbopack**: si una clase Tailwind nueva no se aplica en dev, detener el servidor, borrar `.next` y reiniciar.
 - **Cliente Prisma tras una migración**: el `npm run dev` en curso conserva el cliente viejo (singleton en `globalThis`) y falla con "Unknown field": hay que reiniciarlo.
 - **Migraciones no interactivas**: `prisma migrate dev` falla con "environment is non-interactive" si hay advertencias. Generar el SQL con `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` en `prisma/migrations/<UTC yyyymmddHHMMSS>_<nombre>/migration.sql` y aplicar con `npx prisma migrate deploy` + `npx prisma generate`.
+- **Recharts y periodos parciales**: un periodo cortado por el inicio del rango o aún en curso se ve como caída; por eso los gráficos por periodo parten del primer periodo completo y "antes → ahora" ignora el periodo en curso.
 - **Auth.js con `next start`/Nginx**: requiere `AUTH_TRUST_HOST=true` (si no, error `UntrustedHost`).
 
 ---
@@ -283,7 +368,9 @@ VPS Hetzner con QA y Prod en contenedores separados; Nginx o Traefik enruta por 
 ## 11. Pruebas
 
 - **Estáticas**: `npx tsc --noEmit`, `npm run lint`, `npm run build`.
-- **E2E con Playwright** (navegador real, viewport 390×844), desde el directorio temporal de Claude (no versionadas ni dependencia del proyecto). Suites: auth, ejercicios, rutinas y calendario (asignación, plantillas, series, filtros de entrada, gestos, aislamiento entre usuarios con ids falsificados).
+- **E2E con Playwright** (navegador real, viewport 390×844), desde el directorio temporal de Claude (no versionadas ni dependencia del proyecto). Suites: auth, ejercicios, rutinas, calendario (asignación, plantillas, series, filtros de entrada, gestos, aislamiento entre usuarios con ids falsificados) y dashboard (siembra ~14 meses de historial directo en la BD: valores de cada tarjeta, kg/lbs, rangos, comparar/quitar fichas, niveles, tabla, constancia, aviso de nivel, aislamiento).
+- **Cálculos del dashboard**: `src/lib/progress.ts` es puro; se prueba aislado con `npx tsx` (script en el scratchpad).
+- **Paleta de series**: validarla con el validador de la skill `dataviz` (`validate_palette.js --mode dark --surface #1c1915`) antes de cambiarla.
   - Correr **en `next dev` y en `next start`**. Si el usuario tiene su dev server en el puerto 3000, usarlo (`BASE=http://localhost:3000`); el de producción se levanta en el 3100.
   - Esperar la hidratación (`waitForLoadState("networkidle")`) antes de interactuar tras un `goto`/`reload`.
   - Usuarios de prueba `e2e-…@trackapp.local`: **borrarlos al terminar** (primero sus `WorkoutSession`, luego el `User`).
