@@ -1,0 +1,105 @@
+// Esquema de datos de TrackApp (ver CLAUDE.md, sección 4).
+// Regla de aislamiento total: toda entidad pertenece (directa o indirectamente) a un User.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WeightUnit {
+  kg
+  lbs
+  level
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String // hash, nunca texto plano
+  createdAt DateTime @default(now())
+
+  exercises Exercise[]
+  routines  Routine[]
+  sessions  WorkoutSession[]
+}
+
+model Exercise {
+  id         String    @id @default(cuid())
+  name       String
+  userId     String
+  // Archivar en vez de borrar: conserva el historial de series y el dashboard.
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routineExercises RoutineExercise[]
+  sets             Set[]
+
+  @@unique([userId, name])
+}
+
+model Routine {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  createdAt DateTime @default(now())
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises RoutineExercise[]
+  sessions  WorkoutSession[]
+
+  @@unique([userId, name])
+}
+
+model RoutineExercise {
+  id         String @id @default(cuid())
+  routineId  String
+  exerciseId String
+  order      Int
+
+  routine  Routine  @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@index([routineId, order])
+  @@index([exerciseId])
+}
+
+model WorkoutSession {
+  id              String   @id @default(cuid())
+  userId          String
+  date            DateTime @db.Date
+  // null = entrenamiento libre (o la rutina de origen fue eliminada).
+  originRoutineId String?
+  createdAt       DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originRoutine Routine? @relation(fields: [originRoutineId], references: [id], onDelete: SetNull)
+  sets          Set[]
+
+  @@index([userId, date])
+  @@index([originRoutineId])
+}
+
+model Set {
+  id         String     @id @default(cuid())
+  sessionId  String
+  exerciseId String
+  setNumber  Int
+  reps       Int
+  weight     Decimal    @db.Decimal(6, 2)
+  weightUnit WeightUnit @default(kg)
+  createdAt  DateTime   @default(now())
+
+  session  WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // NoAction: un ejercicio con series no se puede borrar, solo archivar.
+  // Ojo: por esto un User con series no se borra directo; hay que borrar
+  // primero sus WorkoutSession (y con ellas sus Set) en una transacción.
+  exercise Exercise       @relation(fields: [exerciseId], references: [id], onDelete: NoAction)
+
+  @@index([sessionId])
+  @@index([exerciseId])
+}
