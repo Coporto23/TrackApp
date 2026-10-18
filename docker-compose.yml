@@ -1,0 +1,25 @@
+# Entorno de DESARROLLO: PostgreSQL local para TrackApp.
+# Uso: docker compose up -d
+# El entorno de QA/Producción (Nginx/Traefik + subdominios) se define en
+# docker-compose.prod.yml durante la Fase 6.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: trackapp-db-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-trackapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trackapp}
+      POSTGRES_DB: ${POSTGRES_DB:-trackapp_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - trackapp_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  trackapp_pgdata:
