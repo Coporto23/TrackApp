@@ -19,7 +19,7 @@
 | Drag & drop | `@dnd-kit/core` / `sortable` / `modifiers` / `utilities` | 6.3.1 / 10.0.0 / 9.0.0 / 3.2.2 (fijadas) | Reordenar ejercicios (puntero + teclado). |
 | Dev | `tsx`, `dotenv`, ESLint 9 (`eslint-config-next`) | — | `tsx` ejecuta el seed. |
 | Gráficos | Recharts | 3.10.1 (fijada) | Dashboard. Prop `responsive` (sin `ResponsiveContainer`), animaciones desactivadas. |
-| PWA | next-pwa o solución nativa | — | Pendiente (paso 13). |
+| PWA | — | — | Descartada por el usuario (paso 13): app web que funciona solo con conexión. |
 | Infra | Docker Compose + Nginx/Traefik (Hetzner), Cloudflare | — | Pendiente (Fase 6). |
 
 ---

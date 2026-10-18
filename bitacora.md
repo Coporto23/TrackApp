@@ -19,8 +19,8 @@
 | | 9. Creador de rutinas | ✅ Finalizado |
 | 4. Tracker | 10. Calendario | ✅ Finalizado |
 | | 11. Registro de series | ✅ Finalizado (integrado en el calendario) |
-| 5. Dashboard y PWA | 12. Dashboard de progresión | ✅ Finalizado |
-| | 13. PWA instalable | ⏭️ Siguiente |
+| 5. Dashboard | 12. Dashboard de progresión | ✅ Finalizado |
+| | 13. PWA instalable | ❌ Descartado por el usuario |
 | 6. Docker VPS | 14. Dockerfile de producción | Pendiente (solo al final) |
 | | 15. `docker-compose.prod.yml` + Nginx/Traefik | Pendiente (solo al final) |
 
@@ -190,3 +190,7 @@
 - **Validación**: `tsc`, `lint`, `build` OK; 36 comprobaciones unitarias; E2E del dashboard (con rango personalizado) **OK en `next dev` y `next start`**; usuarios `e2e-…` borrados.
 - **Feedback (Usuario)**: al cambiar de pestaña volvía Press de Banca como predeterminado y se perdían los gráficos elegidos. **Causa**: la selección vivía solo en la URL (`?e=`), que la barra inferior no conserva, y sin `?e=` se elegía un ejercicio por defecto. **Decisión (Usuario)**: sin ejercicio predeterminado y recordar la selección junto con el rango y las opciones. **Solución (Técnica)**: cookie `trackapp-dashboard-exercises` leída por el servidor; se eliminó la selección por defecto. E2E nuevas: sin selección inicial, volver desde Calendario y recargar conservan ejercicios, rango y unidad. OK en dev (contra el `npm run dev` del usuario en :3000) y en `next start`; el indicador de Next no mostró issues.
 - **Cierre**: el usuario aprobó el paso 12 y pidió commit + push.
+
+### Paso 13 — PWA (descartado)
+- Se explicó al usuario qué implicaba: manifest, iconos, service worker, pantalla sin conexión, instalación en Android/iPhone, requisito de HTTPS y la opción de registrar series offline.
+- **Decisión (Usuario)**: **descartar el paso 13**. TrackApp queda como aplicación web que funciona **solo con conexión** (sin instalación ni modo offline). Se actualizaron el plan y el stack en `CLAUDE.md` y `ESPECIFICACIONES.md`.

@@ -11,7 +11,7 @@
 
 ## 1. Contexto del Proyecto
 
-**TrackApp** es una aplicación web (PWA) para registrar de forma rápida y sin fricción la **sobrecarga progresiva** en rutinas de hipertrofia (orientada a un split de 5 días). Se usa desde el gimnasio, en el celular y con una mano: el usuario gestiona sus ejercicios y rutinas, planifica sus días en un calendario y registra series (repeticiones y peso) para ver su progresión.
+**TrackApp** es una aplicación web mobile-first (requiere conexión) para registrar de forma rápida y sin fricción la **sobrecarga progresiva** en rutinas de hipertrofia (orientada a un split de 5 días). Se usa desde el gimnasio, en el celular y con una mano: el usuario gestiona sus ejercicios y rutinas, planifica sus días en un calendario y registra series (repeticiones y peso) para ver su progresión.
 
 - Repositorio: https://github.com/Coporto23/TrackApp (rama `main`).
 - Idioma del producto y de la colaboración: **español** (textos de UI, documentación y comunicación). Identificadores de código en inglés.
@@ -90,7 +90,7 @@
 
 ## 5. Stack Objetivo
 
-Next.js (App Router) · Tailwind CSS · PostgreSQL · Prisma ORM · Auth.js (credenciales, JWT) · PWA (next-pwa o solución nativa) · Docker Compose · VPS Hetzner con Nginx/Traefik como reverse proxy · Cloudflare (DNS + proxy HTTPS).
+Next.js (App Router) · Tailwind CSS · PostgreSQL · Prisma ORM · Auth.js (credenciales, JWT) · Recharts · Docker Compose · VPS Hetzner con Nginx/Traefik como reverse proxy · Cloudflare (DNS + proxy HTTPS).
 
 Detalle de versiones y decisiones técnicas: `ESPECIFICACIONES.md`.
 
@@ -119,9 +119,9 @@ Detalle de versiones y decisiones técnicas: `ESPECIFICACIONES.md`.
 10. Calendario (semana, asignar rutinas a los días).
 11. Registro de series (repeticiones, carga y unidad) por ejercicio del día.
 
-**Fase 5 — Dashboard y PWA**
+**Fase 5 — Dashboard**
 12. Gráfico de Progresión de Carga Máxima (MAX de peso por ejercicio y sesión).
-13. PWA instalable (manifest, iconos, service worker).
+13. ~~PWA instalable~~ — **descartado por el usuario** (2026-10-18): solo aplicación web con conexión, sin instalación ni modo offline.
 
 **Fase 6 — Dockerización para VPS** *(solo al final)*
 14. Dockerfile de producción para Next.js.
