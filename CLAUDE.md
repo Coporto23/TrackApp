@@ -1,154 +1,256 @@
-Documento de Arquitectura y Especificaciones (Contexto para Claude Code)
+# TrackApp — Documento de Arquitectura y Especificaciones (Contexto para Claude Code)
 
-0. Reglas de Trabajo (Obligatorias)
+> Documento maestro del proyecto. Describe los requerimientos, la arquitectura, las convenciones y el estado actual del desarrollo para poder retomarlo en cualquier iteración. Mantenerlo actualizado al cerrar cada paso.
 
-- Desarrollo exclusivamente en LOCAL. La configuración de QA y luego de Producción (Fase 6) se hace solo cuando todo lo demás esté terminado.
-- Consultar al usuario cualquier decisión en la que no haya certeza (librerías, estructura, interpretación de la especificación, discrepancias). No asumir.
-- Confirmar con el usuario al terminar cada paso antes de avanzar al siguiente.
-- Next.js 16 tiene cambios incompatibles con versiones anteriores: antes de escribir código de Next.js, consultar la guía correspondiente en `node_modules/next/dist/docs/` (ver AGENTS.md).
-- Prisma bloquea comandos destructivos (`migrate reset`, etc.) invocados por IA: requieren consentimiento explícito del usuario y solo se ejecutan contra la BD de desarrollo.
+---
 
-1. Descripción del Proyecto
+## 0. Reglas de Trabajo (Obligatorias)
 
-Aplicación Web (PWA) orientada al registro rápido y eficiente de la sobrecarga progresiva en rutinas de hipertrofia (enfocado en un split de 5 días). La aplicación permite al usuario registrar ejercicios, rutinas y series diarias sin fricción desde el gimnasio.
+- **Solo desarrollo LOCAL.** La configuración de QA y luego de Producción (Fase 6) se hace únicamente cuando todo lo demás esté terminado.
+- **Consultar al usuario** cualquier decisión en la que no haya certeza (librerías, estructura, interpretación de la especificación, discrepancias, cambios al modelo de datos). No asumir.
+- **Confirmar con el usuario al terminar cada paso** antes de avanzar al siguiente. Hacer commit + push solo cuando el usuario lo apruebe.
+- **Next.js 16 tiene cambios incompatibles** con versiones anteriores: antes de escribir código de Next.js, leer la guía correspondiente en `node_modules/next/dist/docs/` (ver `AGENTS.md`).
+- **Prisma bloquea comandos destructivos** (`migrate reset`, etc.) invocados por IA: requieren consentimiento explícito del usuario y solo se ejecutan contra la BD de desarrollo.
+- **Validar la UI en `next dev` y en `next start`** (ver sección 9). El usuario prueba con `npm run dev`.
+- Idioma: código (identificadores) en inglés; textos de la UI, comentarios y commits descriptivos en español/inglés según el archivo existente. Commits con prefijo convencional (`feat:`, `fix:`…).
 
-2. Stack Tecnológico (Full-Stack Monorepo)
+---
 
-Framework Core: Next.js 16 (App Router, TypeScript, directorio `src/`, alias `@/*`, Turbopack).
+## 1. Descripción del Proyecto
 
-Estilos / UI: Tailwind CSS v4.
+Aplicación Web (PWA) orientada al registro rápido y eficiente de la **sobrecarga progresiva** en rutinas de hipertrofia (enfocado en un split de 5 días). Permite al usuario registrar ejercicios, rutinas y series diarias sin fricción desde el gimnasio (mobile-first, uso con una mano).
 
-Base de Datos: PostgreSQL 16 (en desarrollo: contenedor Docker `trackapp-db-dev`).
+Repositorio: https://github.com/Coporto23/TrackApp (rama `main`).
 
-ORM: Prisma ORM 7.10.1 (versiones fijadas; NO actualizar a la 8.x sin consultar). Usa el generador `prisma-client` (cliente generado en `src/generated/prisma`, ignorado en git y regenerado en `postinstall`) y el driver adapter `@prisma/adapter-pg`. Configuración en `prisma7.config.ts` (nombre por defecto de Prisma 7.10).
+---
 
-Autenticación: Auth.js (NextAuth) v5.0.0-beta.32 (fijada) con estrategia de sesión basada en JWT. Contraseñas con Argon2id (`@node-rs/argon2`, parámetros OWASP). Validación con Zod 4.
+## 2. Stack Tecnológico (Full-Stack Monorepo)
 
-Next.js 16 + Cache Components (`cacheComponents: true`): leer la sesión SIEMPRE dentro de un `<Suspense>`, nunca en el nivel superior de un layout. `middleware` se llama ahora `proxy.ts` (corre en Node.js).
+| Capa | Tecnología | Notas |
+|---|---|---|
+| Framework | **Next.js 16.4** (App Router, TypeScript, `src/`, alias `@/*`, Turbopack) | `cacheComponents: true` y `partialPrefetching: true` en `next.config.ts`. `middleware` ahora se llama `proxy.ts` y corre en Node.js. |
+| UI | **Tailwind CSS v4** | Tema en `src/app/globals.css` (`@theme`). Clases propias reutilizables con `@apply` deben declararse como `@utility`. |
+| BD | **PostgreSQL 16** | Dev: contenedor Docker `trackapp-db-dev`. |
+| ORM | **Prisma 7.10.1** (fijada) | Generador `prisma-client` → `src/generated/prisma` (ignorado en git, se regenera en `postinstall`). Driver adapter `@prisma/adapter-pg`. Config en `prisma7.config.ts`. **No subir a Prisma 8 sin consultar** (la etiqueta `latest` del CLI apunta a una RC). |
+| Auth | **Auth.js (next-auth) 5.0.0-beta.32** (fijada) | Sesión JWT, provider Credentials. |
+| Hash | **Argon2id** (`@node-rs/argon2` 2.2.2) | Parámetros OWASP: 19 MiB, t=2, p=1. |
+| Validación | **Zod 4.6** | Esquemas en `src/lib/validation/`. |
+| PWA | next-pwa o solución nativa de Next.js | Pendiente (Fase 5). |
+| Infra | Docker Compose + Nginx/Traefik en VPS Hetzner, Cloudflare DNS/Proxy | Pendiente (Fase 6). |
 
-PWA: next-pwa (o solución nativa de Next.js) para manifest y service workers.
+---
 
-Infraestructura: Docker (Docker Compose) para despliegue en VPS (Hetzner) con Nginx como Reverse Proxy. Cloudflare manejará el DNS y protección (Proxy).
+## 3. Alcance del MVP (Reglas de Negocio)
 
-3. Alcance del MVP (Reglas de Negocio)
+### 3.1 Ejercicios — Aislamiento total
+- No existen ejercicios "globales". **Cada ejercicio pertenece exclusivamente a un usuario.**
+- **Al registrarse**, se copian al usuario 26 ejercicios base del split de 5 días (Pecho, Espalda, Piernas, Hombros, Brazos) definidos en `src/lib/default-exercises.ts`. El usuario puede renombrarlos o "eliminarlos" libremente.
+- **"Eliminar" = ARCHIVAR** (`archivedAt`). El ejercicio desaparece de listas y rutinas, pero conserva sus series históricas y su dashboard. Se puede restaurar. La BD impide borrar físicamente un ejercicio con series.
+- **Nombre único por usuario**, sin distinguir mayúsculas (la BD tiene `@@unique([userId, name])`; la app además compara con `mode: "insensitive"`). Los espacios se normalizan (trim + colapsar). Máx. 60 caracteres.
+- Si se intenta crear un ejercicio con el nombre de uno **archivado**, se ofrece **restaurarlo** en vez de duplicarlo.
+- Sin grupo muscular (decisión del usuario: lista simple alfabética con buscador).
 
-Gestión de Ejercicios (Aislamiento Total): No existen ejercicios "globales" compartidos en la base de datos. Cada ejercicio le pertenece exclusivamente a un usuario.
+### 3.2 Rutinas y Calendario
+- Las rutinas son **plantillas** (ej. "Día Pecho") con ejercicios ordenados. Nombre único por usuario.
+- El usuario selecciona un día en el calendario, carga la plantilla y puede agregar/quitar ejercicios sobre la marcha durante la sesión.
 
-Regla: Al momento de que un nuevo usuario se registra, el sistema debe ejecutar un seeder/acción que copie una lista básica de ejercicios (Sentadilla, Press de Banca, etc.) y los guarde en la tabla de ejercicios asignando inmediatamente el userId de ese nuevo usuario. El usuario tiene libertad total para renombrarlos o eliminarlos.
+### 3.3 Métricas de registro
+- Solo se registra: **Número de Serie, Repeticiones y Peso**. El peso puede ser en **kg, lbs o nivel** (máquinas con niveles).
 
-- Definido: "eliminar" un ejercicio = ARCHIVAR (campo `archivedAt`). El ejercicio desaparece de listas y rutinas, pero sus series históricas y el dashboard se conservan. La BD impide borrar físicamente un ejercicio que tenga series.
-- Definido: el nombre de un ejercicio y de una rutina es único por usuario (`@@unique([userId, name])`). Pendiente para Fase 3: si el usuario crea un ejercicio con el mismo nombre que uno archivado, ofrecer restaurar el archivado.
-- Lista semilla: 26 ejercicios del split de 5 días (Pecho, Espalda, Piernas, Hombros, Brazos) en `src/lib/default-exercises.ts`.
+### 3.4 Dashboard
+- Gráfico de línea simple: **"Progresión de Carga Máxima"** (peso máximo levantado en 1 serie) por ejercicio a lo largo del tiempo.
 
-Calendario y Rutinas: Las rutinas son plantillas (ej. "Día Pecho"). El usuario selecciona un día en el calendario, carga la plantilla y puede agregar/quitar ejercicios sobre la marcha durante la sesión.
+### 3.5 Cuentas
+- Registro con email + contraseña (mín. 8, máx. 128) + confirmación, con **auto-login**. Email normalizado (trim + minúsculas). Sin verificación de email en el MVP.
 
-Métricas de Registro: Solo se registra: Número de Serie, Repeticiones, y Peso. El peso puede ser en kg, lbs, o nivel.
+---
 
-Dashboard: Gráfico de línea simple que muestra la "Progresión de Carga Máxima" (peso máximo levantado en 1 serie) filtrado por ejercicio a lo largo del tiempo.
+## 4. Modelo de Datos (implementado en `prisma/schema.prisma`)
 
-4. Modelo de Datos (Implementado en `prisma/schema.prisma`)
+Todas las entidades usan id `cuid()` y `createdAt`. Migración aplicada: `init`.
 
-El esquema implementa las siguientes entidades y relaciones (todas con id `cuid()` y `createdAt`):
+| Entidad | Campos | Restricciones / relaciones |
+|---|---|---|
+| **User** | id, email, password (hash Argon2id), createdAt | email único |
+| **Exercise** | id, name, userId, archivedAt?, createdAt | único (userId, name); cascada al borrar User |
+| **Routine** | id, name, userId, createdAt | único (userId, name); cascada al borrar User |
+| **RoutineExercise** | id, routineId, exerciseId, order (Int) | cascada al borrar su Routine o Exercise; índice (routineId, order) |
+| **WorkoutSession** | id, userId, date (`@db.Date`, solo fecha), originRoutineId?, createdAt | originRoutineId null = entrenamiento libre; al borrar la rutina queda en null |
+| **Set** | id, sessionId, exerciseId, setNumber, reps, weight (`Decimal(6,2)`), weightUnit (enum `kg`/`lbs`/`level`, def. `kg`), createdAt | cascada al borrar su sesión; **Set → Exercise es `NoAction`** |
 
-User: id, email (único), password (hashed), createdAt.
-
-Exercise: id, name, userId (Relación requerida al User - Aislamiento total), archivedAt (opcional). Único (userId, name).
-
-Routine: id, name, userId. Único (userId, name).
-
-RoutineExercise: id, routineId, exerciseId, order (Entero para ordenar). Se borra en cascada con su rutina o ejercicio.
-
-WorkoutSession: id, userId, date (solo fecha, `@db.Date`), originRoutineId (Opcional, null si es entrenamiento libre; al borrar la rutina queda en null).
-
-Set: id, sessionId, exerciseId, setNumber, reps, weight (`Decimal(6,2)`), weightUnit (Enum: 'kg', 'lbs', 'level'; por defecto 'kg'). Se borra en cascada con su sesión.
-
-Reglas de borrado relevantes:
+Reglas de borrado e integridad:
 - Borrar un User borra en cascada sus ejercicios, rutinas y sesiones.
-- Set → Exercise es `NoAction`: un ejercicio con series no se puede borrar (solo archivar).
-- Consecuencia: un User con series NO se puede borrar directo. Si se implementa "eliminar cuenta", hacerlo en una transacción: primero borrar sus WorkoutSession (y con ellas sus Set) y luego el User.
-- Aislamiento: Set no tiene userId; la pertenencia se valida vía su sesión. Toda Server Action debe verificar que sesión, ejercicio y rutina pertenezcan al usuario autenticado.
+- Un ejercicio con series **no se puede borrar** (solo archivar).
+- Consecuencia: un User con series **no se puede borrar directo** (PostgreSQL evalúa la cascada User→Exercise antes que User→Session→Set). Si se implementa "eliminar cuenta": en una transacción, borrar primero sus `WorkoutSession` y luego el `User`.
+- `Set` no tiene userId: su pertenencia se valida vía la sesión. **Toda Server Action debe verificar que sesión, ejercicio y rutina pertenezcan al usuario autenticado.**
+- `weight` es `Decimal`: llega a JS como `Prisma.Decimal`; convertir con `.toString()`/`Number()` antes de pasarlo a Client Components.
 
-5. Infraestructura y Despliegue (QA y Producción)
+---
 
-Estado: POSPUESTO hasta terminar el desarrollo local (ver sección 0).
+## 5. Arquitectura
 
-Servidor: Hetzner Cloud VPS.
+### 5.1 Estructura de carpetas
+```
+prisma/
+  schema.prisma            Modelo de datos
+  migrations/              Migraciones (init)
+  seed.ts                  `npx prisma db seed`: ejercicios base a usuarios sin ejercicios
+prisma7.config.ts          Config de Prisma 7 (schema, migraciones, seed, DATABASE_URL)
+src/
+  proxy.ts                 Chequeo optimista del JWT en cada request (Next 16 "proxy")
+  auth.config.ts           Config Auth.js compartida (sin Prisma/argon2): páginas, callbacks
+  auth.ts                  Auth.js completo: provider Credentials (usa Prisma + argon2)
+  actions/                 Server Actions ("use server")
+    auth.ts                login, register, logout
+    exercises.ts           createExercise, renameExercise, archiveExercise, restoreExercise
+  app/
+    layout.tsx             Raíz: fuentes, metadata, viewport, LowPolyBackdrop
+    globals.css            Tema (paleta, fuentes), utilidades facet, .field, .btn-*
+    (auth)/                Rutas públicas con layout centrado + emblema
+      login/, registro/
+    (app)/                 Rutas autenticadas con BottomNav
+      page.tsx             Inicio (accesos a Ejercicios/Rutinas, "Entrenar hoy" pendiente)
+      ejercicios/          CRUD de ejercicios (lista + modal)
+      calendario/, dashboard/   Placeholders ("Sendero sellado") hasta Fases 4/5
+      perfil/              Datos de la cuenta + cerrar sesión
+    api/auth/[...nextauth]/route.ts   Handlers de Auth.js
+    salir/route.ts         Cierra sesiones huérfanas (usuario borrado) sin bucle de redirección
+  components/              UI reutilizable (ver 6.3)
+  lib/
+    prisma.ts              Cliente Prisma singleton (adapter pg)
+    dal.ts                 Data Access Layer: getCurrentUser()
+    users.ts               createUserWithDefaults(): único punto de creación de usuarios
+    password.ts            hashPassword / verifyPassword (Argon2id)
+    seed-user-exercises.ts seedUserExercises(db, userId) idempotente (acepta transacción)
+    default-exercises.ts   Lista de los 26 ejercicios semilla
+    data/exercises.ts      Lecturas de ejercicios del usuario (getMyExercises, findExerciseByName)
+    validation/            Esquemas Zod (auth.ts, exercise.ts)
+  generated/prisma/        Cliente generado (NO editar, NO versionar)
+```
 
-Entornos: Ambos entornos (QA y Prod) vivirán en el mismo VPS utilizando contenedores Docker separados.
+### 5.2 Autenticación y autorización (tres capas)
+1. **Proxy** (`src/proxy.ts` + `authorized` en `auth.config.ts`): solo lee el JWT de la cookie (sin BD). Sin sesión → redirige a `/login?callbackUrl=…`. Con sesión en `/login` o `/registro` → redirige a `/`. `/salir` siempre permitido. Debe exportar `default` (Next 16 exige detectar la función estáticamente; no usar export desestructurado).
+2. **DAL** (`getCurrentUser()` en `src/lib/dal.ts`): verificación real. Lee la sesión, busca el usuario en BD; sin sesión → `/login`; usuario inexistente → `/salir`. Devuelve `{ id, email, createdAt }`.
+3. **Server Actions**: cada acción llama a `getCurrentUser()` y filtra por `userId` en la consulta (`updateMany({ where: { id, userId } })`), de modo que un id ajeno simplemente no afecta nada.
 
-Proxy: Configurar Nginx o Traefik dentro de Docker para enrutar el tráfico basado en subdominios (ej. qa.dominio.com va al contenedor de pruebas, app.dominio.com al de producción).
+### 5.3 Patrones obligatorios con Cache Components (Next 16)
+- Leer la sesión **siempre dentro de un `<Suspense>`**, nunca en el nivel superior de un layout/página (sería error de build y bloquearía el shell estático). Patrón: la página renderiza el encabezado estático y un componente async interno dentro de `<Suspense fallback=…>`.
+- No se usa `'use cache'` por ahora: los datos son dinámicos por usuario. Tras una mutación, la acción llama a **`refresh()`** (`next/cache`) para refrescar el router. Si en el futuro se cachean datos con `'use cache'` + `cacheTag`, usar `updateTag` en las acciones y nunca poner datos sensibles en claves/tags.
 
-Cloudflare: Actuará solo como DNS y Proxy de seguridad (HTTPS).
+### 5.4 Convenciones para agregar una funcionalidad CRUD
+1. Esquema Zod en `src/lib/validation/<entidad>.ts`.
+2. Lecturas en `src/lib/data/<entidad>.ts` (`import "server-only"`, empiezan con `getCurrentUser()`, devuelven objetos planos y serializables).
+3. Mutaciones en `src/actions/<entidad>.ts` (`"use server"`): validar → `getCurrentUser()` → consulta filtrada por `userId` → `refresh()`. Para formularios con feedback, firma `(prevState, formData)` + tipo `XFormState` (error, ok, valores para no perder lo escrito); capturar `P2002` (único) como mensaje amigable.
+4. UI en `src/app/(app)/<ruta>/`: `page.tsx` (Server Component con Suspense) + componentes cliente (`useActionState`). Seguir la convención UX de 6.4.
 
-Desarrollo local (implementado):
-- `docker-compose.yml`: solo PostgreSQL 16 de desarrollo (`docker compose up -d`). Credenciales por defecto en `.env.example`; copiar a `.env`.
-- Variables requeridas (ver `.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST=true` (sin esta última Auth.js rechaza el login con `next start` y detrás de Nginx).
+### 5.5 Registro de usuario
+`register` (Server Action) → valida → `hashPassword` → `createUserWithDefaults(email, hash)` (User + 26 ejercicios en **una transacción**) → `signIn("credentials")` (auto-login, redirige a `/`). Email duplicado → error en el campo email.
+
+---
+
+## 6. Diseño Visual y UX (aprobado por el usuario)
+
+### 6.1 Estilo
+**Grimdark low-poly** inspirado en Dark Souls / RPG: sobrio, elegante, no tosco ni chocante. **Solo tema oscuro.**
+
+### 6.2 Tokens (`src/app/globals.css`)
+- Colores: `abyss` (#0b0a09, fondo), `ash`/`stone` (superficies), `stone-edge` (bordes), `bone` (texto), `fog` (texto secundario), **`ember`/`ember-bright`/`ember-deep` (acento único: brasa de hoguera)**, `gold` (títulos), `blood` (errores).
+- Tipografías: **Cinzel** (`font-display`: títulos y etiquetas en mayúsculas con tracking amplio) y **Alegreya Sans** (texto).
+- Formas: utilidades `facet` / `facet-sm` (esquinas biseladas por clip-path). Inputs `.field` rectos con foco ember. Botones `.btn-ember` (gradiente brasa) y `.btn-ghost`.
+- Fondo `LowPolyBackdrop`: malla de triángulos determinista + resplandor de brasa inferior.
+
+### 6.3 Componentes (`src/components/`)
+`Panel` (tarjeta biselada con borde), `PageHeader` (título dorado + separador con rombo), `FormField`, `Modal` (sobre `<dialog>` nativo), `IconButton` (44px táctil, se deshabilita al enviar), `BackLink`, `BottomNav`, `ComingSoon`, `LowPolyBackdrop`, `icons.tsx` (iconos facetados propios: hoguera, calendario, gráfico, yelmo, emblema, +, editar, archivar, restaurar, buscar, atrás, check, cerrar).
+
+### 6.4 Convenciones UX
+- **Pantallas de gestión: el listado es protagonista.** Botón "+" en la cabecera del listado; **crear y editar se hacen en un modal con botones Cancelar / Aceptar** (no inputs incrustados en la página). El modal cierra con Cancelar, Esc o clic fuera; en error se mantiene abierto mostrando el mensaje y conservando lo escrito.
+- Acciones reversibles (archivar) son de un toque, sin confirmación; lo archivado queda en una sección plegable "Archivados" con opción de restaurar.
+- Buscadores ignoran tildes y mayúsculas; orden alfabético con `Intl.Collator("es")`.
+- Objetivos táctiles ≥ 44px. Navegación inferior fija con safe-area (`env(safe-area-inset-bottom)`).
+- Textos en español, con un toque temático leve ("Sendero sellado", "Avivando las brasas…", "Tu arsenal") sin sacrificar claridad. Lenguaje neutro en género hacia el usuario ("Saludos", no "Bienvenido").
+- Navegación: barra inferior con **Inicio, Calendario, Dashboard, Perfil**. Ejercicios y Rutinas se abren **desde Inicio** (tarjetas con contador) y marcan la pestaña Inicio como activa.
+
+### 6.5 Gotchas de UI
+- `Modal`: no cerrar el `<dialog>` en el cleanup del efecto. En Strict Mode (dev) React monta/desmonta/remonta y ese `close()` dispara `onClose`, cerrando el modal al abrirlo. Se abre con `if (!dialog.open) dialog.showModal()` y se cierra desmontándolo.
+- El modal se monta solo mientras está abierto (estado `dialog` en el padre), así su formulario parte limpio cada vez.
+
+---
+
+## 7. Infraestructura y Despliegue
+
+### 7.1 Desarrollo local (implementado)
+- `docker-compose.yml`: solo PostgreSQL 16 (`docker compose up -d`), volumen `trackapp_pgdata`, healthcheck.
+- Copiar `.env.example` a `.env`. Variables:
+  - `DATABASE_URL` (por defecto `postgresql://trackapp:trackapp@localhost:5432/trackapp_dev`)
+  - `AUTH_SECRET` (generar: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`)
+  - `AUTH_TRUST_HOST=true` (**obligatoria**: sin ella Auth.js rechaza el login con `next start` y detrás de Nginx — error `UntrustedHost`).
 - En Windows, Docker Desktop está instalado por usuario y `docker` puede no estar en el PATH de la terminal: usar `C:\Users\copor\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe`.
 
-6. Plan de Ejecución (Instrucciones para Claude Code)
+### 7.2 QA y Producción — POSPUESTO (Fase 6)
+- Servidor: Hetzner Cloud VPS. QA y Prod en el mismo VPS con contenedores Docker separados.
+- Proxy: Nginx o Traefik en Docker enrutando por subdominio (ej. `qa.dominio.com` → QA, `app.dominio.com` → Prod).
+- Cloudflare: solo DNS y proxy de seguridad (HTTPS).
+- Recordar: `AUTH_TRUST_HOST=true`, `AUTH_SECRET` distinto por entorno, `prisma migrate deploy` en el arranque.
 
-Claude, por favor sigue este orden estricto de implementación. Confirma conmigo al terminar cada paso antes de avanzar al siguiente:
+---
 
-Fase 1: Inicialización y Base de Datos — COMPLETADA
+## 8. Plan de Ejecución y Estado
 
-[x] 1. Inicializa el proyecto Next.js (App Router) con Tailwind CSS.
+Seguir este orden estricto. Confirmar con el usuario al terminar cada paso.
 
-[x] 2. Configura el archivo docker-compose.yml de desarrollo para levantar una instancia de PostgreSQL local.
+### Fase 1: Inicialización y Base de Datos — ✅ COMPLETADA
+- [x] 1. Proyecto Next.js (App Router) con Tailwind CSS.
+- [x] 2. `docker-compose.yml` de desarrollo con PostgreSQL local.
+- [x] 3. Prisma inicializado y modelo de datos (sección 4) en `schema.prisma`; migración `init`.
+- [x] 4. Seeding: `seedUserExercises()` + `prisma/seed.ts`.
 
-[x] 3. Instala e inicializa Prisma. Traduce el modelo de datos (Sección 4) a schema.prisma. (Migración `init` aplicada.)
+### Fase 2: Autenticación y Layout — ✅ COMPLETADA
+- [x] 5. Auth.js con credenciales (email/contraseña), JWT, Argon2id; proxy + DAL.
+- [x] 6. Asignación de ejercicios semilla al registrarse (`createUserWithDefaults`, transacción) + auto-login.
+- [x] 7. Layout mobile-first con navegación inferior (Inicio, Calendario, Dashboard, Perfil) y estilo grimdark low-poly.
 
-[x] 4. Crea el script de Seeding que contiene los ejercicios básicos, y la lógica para que al crear un usuario (Fase 2) se inserten estos ejercicios con su userId.
-   - `src/lib/seed-user-exercises.ts` → `seedUserExercises(db, userId)`: idempotente, acepta un cliente de transacción. Usarla en la MISMA transacción que crea el User.
-   - `prisma/seed.ts` (`npx prisma db seed`): asigna los ejercicios a usuarios existentes sin ejercicios.
-   - Cliente Prisma singleton: `src/lib/prisma.ts`.
+### Fase 3: Core CRUD y UI — EN CURSO
+- [x] 8. CRUD de Ejercicios (`/ejercicios`): listado alfabético con buscador, "+" abre modal "Nuevo ejercicio", lápiz abre modal "Renombrar ejercicio", archivar/restaurar, oferta de restaurar al crear un nombre archivado, aislamiento por usuario verificado.
+- [ ] 9. **SIGUIENTE:** Creador de Rutinas (`/rutinas`): crear/renombrar/eliminar rutinas, asignar ejercicios y ordenarlos. Aplicar la convención UX 6.4 (listado + modal). Los ejercicios archivados no se muestran en las rutinas. Habilitar la tarjeta "Rutinas" de Inicio (hoy muestra "Próximamente").
 
-Fase 2: Autenticación y Layout — COMPLETADA
-[x] 5. Configura Auth.js (NextAuth) con credenciales (Email/Password).
-   - `src/auth.config.ts` (config compartida, sin Prisma: usada por el proxy) y `src/auth.ts` (provider Credentials).
-   - `src/proxy.ts`: chequeo optimista del JWT; redirige a /login (rutas públicas: /login, /registro, /salir).
-   - `src/lib/dal.ts` → `getCurrentUser()`: verificación real en el servidor. Usarla en páginas (dentro de Suspense) y en TODA Server Action.
-   - `/salir` (route handler): cierra sesiones cuyo usuario ya no existe (evita bucle de redirecciones).
-   - Registro: email + contraseña (mín. 8) + confirmación, con auto-login. Sin verificación de email (MVP).
-[x] 6. Asegúrate de implementar el trigger (vía API route o Server Action) que asigne los ejercicios semilla al momento de un registro exitoso.
-   - `src/lib/users.ts` → `createUserWithDefaults()`: crea el User y sus ejercicios en una transacción. Punto único de creación de usuarios (lo reutilizará el login con Google).
-   - Server Actions de auth en `src/actions/auth.ts` (login, register, logout) con `useActionState`.
-[x] 7. Crea el Layout principal (Mobile-first, diseño limpio para gimnasio) con la navegación inferior (Inicio, Calendario, Dashboard, Perfil).
-   - Rutas: grupo `(auth)` (/login, /registro) y grupo `(app)` (/, /calendario, /dashboard, /perfil) con `BottomNav`.
+### Fase 4: Tracker de Entrenamiento
+- [ ] 10. Interfaz del Calendario.
+- [ ] 11. Vista de "Sesión Activa": instanciar una rutina en el día actual y registrar rápidamente las series (serie, repeticiones, peso + unidad).
 
-Estilo visual (aprobado por el usuario): grimdark low-poly inspirado en Dark Souls/RPG, sobrio y no chocante. Solo tema oscuro.
-- Paleta en `src/app/globals.css` (@theme): abyss/ash/stone (fondos), stone-edge (bordes), bone (texto), fog (texto secundario), ember (acento único: brasa de hoguera), gold (títulos), blood (errores).
-- Tipografías: Cinzel (`font-display`, títulos/etiquetas en mayúsculas) y Alegreya Sans (texto).
-- Formas: utilidades `facet` / `facet-sm` (esquinas biseladas); componentes `Panel`, `FormField`, `PageHeader`, `ComingSoon`; clases `.field`, `.btn-ember`, `.btn-ghost`.
-- Fondo `LowPolyBackdrop` (malla de triángulos determinista) e iconos facetados propios en `src/components/icons.tsx`.
-- Textos de la UI en español, con un toque temático leve ("Sendero sellado", "Avivando las brasas…") sin sacrificar claridad.
+### Fase 5: Dashboard y PWA
+- [ ] 12. Gráfico de Progresión de Carga Máxima (agrupar por sesión y extraer el MAX de peso por ejercicio).
+- [ ] 13. PWA instalable (manifest, iconos, service worker).
 
-Mejoras futuras acordadas:
-- Login con Google (próxima iteración): agregar provider, hacer `password` opcional (migración) y crear el usuario con `createUserWithDefaults()`.
-- Volver a la página solicitada (callbackUrl) tras el login; hoy siempre redirige a Inicio.
+### Fase 6: Dockerización para VPS (pospuesta hasta terminar el desarrollo local)
+- [ ] 14. Dockerfile de producción para Next.js.
+- [ ] 15. `docker-compose.prod.yml` para Hetzner con Nginx/Traefik para los subdominios de QA y Producción.
+
+### Mejoras futuras acordadas (fuera del MVP actual)
+- **Login con Google** (próxima iteración): agregar provider, hacer `password` opcional (migración) y crear el usuario con `createUserWithDefaults()` (find-or-create por email).
+- Volver a la página solicitada (`callbackUrl`) tras el login; hoy siempre redirige a Inicio.
 - Límite de intentos de login (proponer junto al despliegue).
+- Revisar las 5 vulnerabilidades "high" que reporta `npm audit` en dependencias de terceros (no aplicar `--force` sin revisar).
 
-Fase 3: Core CRUD y UI — SIGUIENTE
-8. Desarrolla las Server Actions y la interfaz (Páginas/Componentes) para gestionar los Ejercicios (CRUD).
-9. Desarrolla el creador de Rutinas (asignar ejercicios y ordenarlos).
+---
 
-Fase 4: Tracker de Entrenamiento
-10. Construye la interfaz del Calendario.
-11. Desarrolla la vista de "Sesión Activa": Interfaz que permita instanciar una rutina en el día actual y registrar rápidamente las series (set, repeticiones, peso).
+## 9. Verificación y Pruebas
 
-Fase 5: Dashboard y PWA
-12. Implementa el gráfico de Progresión de Carga Máxima (consulta SQL/Prisma que agrupe por sesión y extraiga el MAX de peso por ejercicio).
-13. Configura next-pwa para asegurar que la app es instalable y los iconos del manifest son correctos.
+- Antes de dar un paso por terminado: `npx tsc --noEmit`, `npm run lint`, `npm run build`.
+- **Pruebas E2E con Playwright** (navegador real, viewport móvil 390×844): se ejecutan desde el directorio temporal de Claude (no están en el repo ni son dependencia del proyecto). Cubren registro/login/logout, CRUD de ejercicios con modales y aislamiento entre usuarios (un usuario B no puede modificar ejercicios de A falsificando el id).
+  - Levantar el servidor en el puerto 3100 y correr la suite **en `next dev` y en `next start`** (hay bugs que solo aparecen en uno de los dos, p. ej. Strict Mode).
+  - Usuarios de prueba con email `e2e-…@trackapp.local`; **borrarlos al terminar** (primero sus `WorkoutSession`, luego el `User`).
+  - En Windows, detener la tarea no siempre mata el proceso `node` hijo: liberar el puerto 3100 matando el proceso que escucha en él.
+- Si en el futuro se quiere una suite E2E versionada, proponerlo al usuario (agregaría Playwright como devDependency).
 
-Fase 6: Dockerización para VPS (pospuesta hasta terminar el desarrollo local)
-14. Crea el Dockerfile de producción para Next.js.
-15. Crea un docker-compose.prod.yml que estructure el entorno para Hetzner (incluyendo Nginx/Traefik para gestionar los subdominios de QA y Producción en el mismo host).
+---
 
-7. Comandos Útiles (Desarrollo)
+## 10. Comandos Útiles (Desarrollo)
 
 - `docker compose up -d` / `docker compose down`: levantar / detener PostgreSQL local.
-- `npm run dev`: servidor de desarrollo.
+- `npm run dev`: servidor de desarrollo (http://localhost:3000).
+- `npm run build` + `npm run start`: build y servidor de producción local.
 - `npx prisma migrate dev --name <nombre>`: crear y aplicar una migración.
 - `npx prisma generate`: regenerar el cliente (también corre en `postinstall`).
 - `npx prisma db seed`: asignar ejercicios base a usuarios sin ejercicios.
 - `npx prisma studio`: explorar la BD.
-- `npm run lint`, `npx tsc --noEmit`, `npm run build`: verificación.
+- `npm run lint`, `npx tsc --noEmit`: verificación estática.

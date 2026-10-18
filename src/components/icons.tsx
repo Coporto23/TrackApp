@@ -78,3 +78,73 @@ export function CrestIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Icon>
+  );
+}
+
+export function EditIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m4 20 1-5L15.5 4.5l4 4L9 19Z" />
+      <path d="m13 7 4 4" />
+    </Icon>
+  );
+}
+
+// Archivar: cofre que se cierra.
+export function ArchiveIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 5h17v4h-17Z" />
+      <path d="M5 9v10.5h14V9" />
+      <path d="M10 13h4" />
+    </Icon>
+  );
+}
+
+export function RestoreIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 12a8 8 0 1 0 2.4-5.7" />
+      <path d="M4 4v5h5" />
+    </Icon>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m10.5 3.5 5 2.5 1.5 5-3 4.5h-5L6 11l1-5Z" />
+      <path d="m15 15.5 5 5" />
+    </Icon>
+  );
+}
+
+export function BackIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M15 5 8 12l7 7" />
+    </Icon>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m5 12.5 4.5 4.5L19 7" />
+    </Icon>
+  );
+}
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m6 6 12 12M18 6 6 18" />
+    </Icon>
+  );
+}

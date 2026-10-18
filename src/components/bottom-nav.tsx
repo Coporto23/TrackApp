@@ -18,6 +18,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/perfil", label: "Perfil", Icon: HelmIcon },
 ];
 
+// Ejercicios y Rutinas se abren desde Inicio, así que cuentan como esa pestaña.
+const HOME_SECTIONS = ["/ejercicios", "/rutinas"];
+
 export function BottomNav() {
   const pathname = usePathname();
 
@@ -28,7 +31,10 @@ export function BottomNav() {
     >
       <ul className="mx-auto grid max-w-md grid-cols-4">
         {NAV_ITEMS.map(({ href, label, Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const active =
+            href === "/"
+              ? pathname === "/" || HOME_SECTIONS.some((s) => pathname.startsWith(s))
+              : pathname.startsWith(href);
           return (
             <li key={href}>
               <Link
