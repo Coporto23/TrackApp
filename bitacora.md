@@ -21,8 +21,8 @@
 | | 11. Registro de series | ✅ Finalizado (integrado en el calendario) |
 | 5. Dashboard | 12. Dashboard de progresión | ✅ Finalizado |
 | | 13. PWA instalable | ❌ Descartado por el usuario |
-| 6. Docker VPS | 14. Dockerfile de producción | Pendiente (solo al final) |
-| | 15. `docker-compose.prod.yml` + Nginx/Traefik | Pendiente (solo al final) |
+| 6. Docker VPS | 14. Dockerfile de producción | ✅ Listo (validado en local) |
+| | 15. `docker-compose.prod.yml` + Traefik + pipeline | 🛠️ Listo en el repo; falta configurar el servidor y el dominio |
 
 **Commits en `main`**: `b052645` init · `4d591c1` Prisma + seeding · `5afe2f0` auth + layout · `3d95d53` ejercicios · `7a3f369` rutinas · `035077e` calendario + series (pasos 10–11) · dashboard (paso 12).
 
@@ -194,3 +194,19 @@
 ### Paso 13 — PWA (descartado)
 - Se explicó al usuario qué implicaba: manifest, iconos, service worker, pantalla sin conexión, instalación en Android/iPhone, requisito de HTTPS y la opción de registrar series offline.
 - **Decisión (Usuario)**: **descartar el paso 13**. TrackApp queda como aplicación web que funciona **solo con conexión** (sin instalación ni modo offline). Se actualizaron el plan y el stack en `CLAUDE.md` y `ESPECIFICACIONES.md`.
+
+### Fase 6 — Pipeline y servidor (pasos 14–15)
+- **Contexto (Usuario)**: VPS Hetzner **x86_64**, Ubuntu 24.04, recién instalado con Docker + Compose y UFW (22/80/443). Dominio `jolscripts.com` en HostGator; QA en `qa.trackapp.jolscripts.com` y Prod en `app.trackapp.jolscripts.com`.
+- **Decisiones (Usuario)**:
+  - Flujo: rama de trabajo en local → merge a `develop` (**despliegue automático en QA**) → con QA aprobado, merge a `main` (**despliegue automático en Producción**).
+  - QA **sin protección extra** (solo el login de la app).
+  - **Sin respaldos** automáticos de la base de Prod por ahora.
+- **Decisiones (Técnica)**: GitHub Actions + GHCR; imagen construida en GitHub (`linux/amd64`) para no compilar en el VPS; imágenes `app` (standalone, no root) y `migrate`; una base por entorno; Traefik 3.7.13 con Let's Encrypt (HTTP-01); despliegue por SSH con usuario `deploy` y token temporal del job para descargar la imagen; migraciones con `compose run --rm migrate` antes de la app; `--wait` con healthcheck; Prod reconstruye la imagen desde `main`.
+- **Revisión del diseño** (revisor independiente): se resolvieron el acceso antes del dominio, el login a GHCR y la imagen de Prod; el usuario confirmó la arquitectura x86_64.
+- **Problemas**:
+  - **`npm ci` fallaba en Docker**: el lock generado en Windows no tenía dependencias opcionales de Linux (`@emnapi/*`). Se regeneró en un contenedor Linux; solo agregó entradas, sin cambiar versiones.
+  - **Prisma sin OpenSSL** en `bookworm-slim`: se instaló `openssl` en la imagen base.
+  - **Login detrás del proxy**: tras cerrar sesión, iniciar de nuevo fallaba ("An unexpected response was received from the server"). **Causa**: Next ve su dirección interna (`0.0.0.0:3000`) y Auth.js armaba con ella el `callbackUrl` y los redirects. **Solución**: `AUTH_URL=https://${APP_HOST}`.
+  - La guía usaba `#` como prompt del servidor: al copiar, bash lo toma como comentario. Se reescribió con bloques etiquetados.
+- **Validación (local)**: imágenes construidas con Docker Desktop; stack simulado (red `web`, Traefik, db, migrate, app): 4 migraciones aplicadas, app sana, HTTP → HTTPS (301), subdominio correcto 200 y desconocido 404; humo con navegador por HTTPS a través de Traefik (registro, cookies `__Secure-`, todas las páginas, cerrar sesión e iniciar de nuevo) **OK**. `actionlint` y `shellcheck` sin observaciones; `tsc`, `lint` y `build` OK. Stack local de prueba eliminado.
+- **Pendiente**: el usuario configura el servidor y los secretos según `deploy/README.md`; luego push de `develop` (primer despliegue a QA) y la etapa del dominio (HostGator; decidir si se usa Cloudflare).

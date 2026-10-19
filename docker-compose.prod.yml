@@ -1,0 +1,71 @@
+# Entorno de QA o Producción de TrackApp en el VPS (uno por carpeta: /opt/trackapp/qa
+# y /opt/trackapp/prod). Lo copia y ejecuta el pipeline mediante deploy/deploy.sh:
+#   docker compose -p trackapp-<entorno> --env-file .env --env-file image.env -f docker-compose.prod.yml …
+# .env (lo crea el usuario en el servidor, nunca se versiona): ENV_NAME, APP_HOST,
+# POSTGRES_PASSWORD, AUTH_SECRET. image.env (lo escribe el pipeline): IMAGE_TAG.
+# Ningún servicio publica puertos: solo Traefik (red externa "web") recibe tráfico.
+
+services:
+  db:
+    image: postgres:16.15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: trackapp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: trackapp
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trackapp -d trackapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [internal]
+
+  # Migraciones de Prisma (no destructivas). Perfil propio: `up` no lo levanta;
+  # deploy.sh lo ejecuta con `run --rm migrate` antes de actualizar la app.
+  migrate:
+    image: ghcr.io/coporto23/trackapp:${IMAGE_TAG:?Falta IMAGE_TAG en image.env}-migrate
+    profiles: [migrate]
+    environment:
+      DATABASE_URL: postgresql://trackapp:${POSTGRES_PASSWORD}@db:5432/trackapp?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+
+  app:
+    image: ghcr.io/coporto23/trackapp:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://trackapp:${POSTGRES_PASSWORD}@db:5432/trackapp?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?Falta AUTH_SECRET en .env}
+      AUTH_TRUST_HOST: "true"
+      # Origen público: dentro del contenedor Next ve su propia dirección
+      # (0.0.0.0:3000) y Auth.js armaría con ella los redirects y el callbackUrl.
+      AUTH_URL: https://${APP_HOST}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.routers.trackapp-${ENV_NAME:?Falta ENV_NAME en .env}.rule=Host(`${APP_HOST:?Falta APP_HOST en .env}`)
+      - traefik.http.routers.trackapp-${ENV_NAME}.entrypoints=websecure
+      - traefik.http.routers.trackapp-${ENV_NAME}.tls.certresolver=le
+      - traefik.http.services.trackapp-${ENV_NAME}.loadbalancer.server.port=3000
+    networks: [internal, web]
+
+networks:
+  internal: {}
+  web:
+    external: true
+
+volumes:
+  pgdata:

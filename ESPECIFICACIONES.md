@@ -20,7 +20,7 @@
 | Dev | `tsx`, `dotenv`, ESLint 9 (`eslint-config-next`) | — | `tsx` ejecuta el seed. |
 | Gráficos | Recharts | 3.10.1 (fijada) | Dashboard. Prop `responsive` (sin `ResponsiveContainer`), animaciones desactivadas. |
 | PWA | — | — | Descartada por el usuario (paso 13): app web que funciona solo con conexión. |
-| Infra | Docker Compose + Nginx/Traefik (Hetzner), Cloudflare | — | Pendiente (Fase 6). |
+| Infra | Docker (`node:24.21.0-bookworm-slim`, `postgres:16.15-alpine`), Traefik, GitHub Actions + GHCR | Traefik 3.7.13 | Fase 6: QA y Prod en un VPS Hetzner. Ver 10.1. |
 
 ---
 
@@ -34,6 +34,10 @@ prisma/
   seed.ts                    `npx prisma db seed`: ejercicios base a usuarios sin ejercicios
 prisma7.config.ts            Config de Prisma 7 (schema, migraciones, seed, DATABASE_URL)
 docker-compose.yml           PostgreSQL 16 de desarrollo
+Dockerfile                   Imágenes de producción: `app` (standalone) y `migrate`
+docker-compose.prod.yml      Un entorno (QA o Prod) en el VPS: db, migrate, app
+.github/workflows/deploy.yml Pipeline: develop → QA, main → Prod
+deploy/                      deploy.sh (despliegue en el VPS), traefik/ (proxy), README.md (guía del servidor)
 src/
   proxy.ts                   Chequeo optimista del JWT en cada request
   auth.config.ts             Config Auth.js compartida (sin Prisma/argon2): páginas, callbacks
@@ -348,6 +352,11 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
 - **Migraciones no interactivas**: `prisma migrate dev` falla con "environment is non-interactive" si hay advertencias. Generar el SQL con `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` en `prisma/migrations/<UTC yyyymmddHHMMSS>_<nombre>/migration.sql` y aplicar con `npx prisma migrate deploy` + `npx prisma generate`.
 - **Recharts y periodos parciales**: un periodo cortado por el inicio del rango o aún en curso se ve como caída; por eso los gráficos por periodo parten del primer periodo completo y "antes → ahora" ignora el periodo en curso.
 - **Auth.js con `next start`/Nginx**: requiere `AUTH_TRUST_HOST=true` (si no, error `UntrustedHost`).
+- **Auth.js detrás del proxy (Traefik)**: dentro del contenedor Next arma la URL de cada petición con su propia dirección (`0.0.0.0:3000`, respeta `X-Forwarded-Proto` pero no el host). Sin `AUTH_URL`, el `callbackUrl` y el redirect tras iniciar sesión apuntan a `https://0.0.0.0:3000/` y el login falla con "An unexpected response was received from the server". Solución: `AUTH_URL=https://<dominio>` en el entorno.
+- **`package-lock.json` generado en Windows**: npm omitió dependencias opcionales de Linux (`@emnapi/*`) y `npm ci` falla en Docker/CI. Si vuelve a pasar, regenerar el lock dentro de un contenedor Linux (`npm install --package-lock-only --ignore-scripts` en `node:24.21.0-bookworm-slim`) y comprobar que solo agrega entradas.
+- **`output: "standalone"`**: `next start` sigue funcionando para las pruebas locales, pero avisa que en producción se use `node .next/standalone/server.js` (lo hace la imagen).
+- **Docker se salta UFW**: los puertos publicados por contenedores quedan abiertos aunque UFW no los permita. Solo Traefik publica puertos.
+- **Next 16 conserva la página anterior oculta**: en las E2E puede haber dos `<main>`; usar `main:visible`.
 
 ---
 
@@ -360,8 +369,48 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
   - `AUTH_TRUST_HOST=true` — obligatoria.
 - Windows: si `docker` no está en el PATH, usar `C:\Users\copor\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe`.
 
-### 10.1 QA y Producción (Fase 6, pendiente)
-VPS Hetzner con QA y Prod en contenedores separados; Nginx o Traefik enruta por subdominio; Cloudflare como DNS y proxy HTTPS. Recordar: `AUTH_TRUST_HOST=true`, `AUTH_SECRET` distinto por entorno y `prisma migrate deploy` al arrancar.
+### 10.1 QA y Producción (Fase 6)
+
+> Acordado con el usuario el 2026-10-18. Las decisiones marcadas *(técnica)* son de Claude.
+
+**Flujo de trabajo (decisión del usuario)**
+1. Cada cambio se trabaja en local en una **rama propia** (`feat/…`, `fix/…`), creada desde `develop`.
+2. Merge de la rama a **`develop`** → despliegue automático en **QA**, donde se valida.
+3. Con QA aprobado, merge de `develop` a **`main`** → despliegue automático en **Producción**.
+- `develop` se crea a partir de `main`. *(técnica)* Se recomienda proteger `main` en GitHub (solo merges vía Pull Request), configuración que hace el usuario.
+
+**Servidor**: VPS Hetzner **x86_64**, Ubuntu 24.04, Docker + Compose plugin instalados, UFW con 22/80/443. Tamaño no informado: por eso **la imagen se construye en GitHub (solo `linux/amd64`) y el servidor solo la descarga** *(técnica)*.
+- **Docker se salta UFW**: un puerto publicado por un contenedor queda expuesto aunque UFW no lo permita. Solo el proxy (Traefik) publica 80/443; la app y las bases no publican puertos.
+
+**Pipeline (GitHub Actions, `.github/workflows/deploy.yml`)** — se dispara con push a `develop` (QA) o `main` (Prod):
+1. **Validar**: `npm ci` (incluye `prisma generate`), `tsc --noEmit`, `lint`; el `next build` ocurre al construir la imagen. Si algo falla, no se despliega.
+2. **Construir y publicar** en GitHub Container Registry (`ghcr.io/coporto23/trackapp`), etiquetado con el SHA del commit: imagen `app` (`:<sha>`) e imagen `migrate` (`:<sha>-migrate`) *(técnica)*.
+3. **Desplegar** por SSH con el usuario `deploy` (clave dedicada, verificación del host con `known_hosts`): copia `docker-compose.prod.yml` y `deploy/deploy.sh` a `/opt/trackapp/<entorno>/` y ejecuta el script, que escribe `image.env` (`IMAGE_TAG=<sha>`), inicia sesión en GHCR con el **token temporal del job** (llega por stdin; sin secretos extra, sirva la imagen pública o privada), descarga las imágenes, levanta la base, **corre las migraciones** (`compose run --rm migrate`) y levanta la app con `--wait`. Si la app no queda sana (healthcheck), el job falla.
+- Un despliegue a la vez por entorno (`concurrency`). Los despliegues quedan registrados en los GitHub Environments `qa` y `production`. Secretos **del repositorio** (mismo servidor para ambos): `SSH_HOST`, `SSH_USER`, `SSH_KEY`, `SSH_KNOWN_HOSTS`.
+- **Prod reconstruye la imagen desde `main`** *(técnica)*: `main` recibe exactamente lo validado en `develop`, así que el código es el mismo de QA; promover la misma imagen exigiría reglas de merge más estrictas.
+- **Volver atrás**: re-ejecutar el workflow de un commit anterior, o en el servidor poner el SHA anterior en `image.env` y `docker compose … up -d`.
+
+**Imagen (`Dockerfile`, multi-stage, `node:24.21.0-bookworm-slim`)** *(técnica)*
+- Next con `output: "standalone"`: la imagen `app` lleva solo el servidor mínimo, `public/` y `.next/static`; corre como usuario no root en el puerto 3000.
+- La imagen `migrate` lleva las dependencias completas y `prisma/`, y ejecuta `prisma migrate deploy` (no destructivo). Corre una vez antes de la app en cada despliegue (`depends_on: service_completed_successfully`).
+- Sin secretos dentro de la imagen; todo llega por variables de entorno en tiempo de ejecución.
+
+**Composición por entorno (`docker-compose.prod.yml`, la misma para QA y Prod)** — en `/opt/trackapp/qa` y `/opt/trackapp/prod`, con proyecto `trackapp-qa` / `trackapp-prod`:
+- `db`: `postgres:16.15-alpine`, volumen propio, healthcheck, sin puertos. **Cada entorno tiene su propia base** (QA nunca toca datos de Prod).
+- `migrate`: corre las migraciones y termina (perfil `migrate`: `up` no lo levanta; el script lo ejecuta con `run`).
+- `app`: la imagen del SHA desplegado, `AUTH_TRUST_HOST=true`, **`AUTH_URL=https://${APP_HOST}`** (ver Gotchas), healthcheck sobre `/login`, etiquetas de Traefik con `Host(${APP_HOST})` y HTTPS.
+- `.env` del servidor (lo crea el usuario, nunca se versiona): `APP_HOST`, `POSTGRES_PASSWORD`, `AUTH_SECRET` (distinto por entorno). `image.env` lo escribe el pipeline.
+
+**Proxy (`deploy/traefik/docker-compose.yml`, `traefik:v3.7.13`)** — en `/opt/trackapp/traefik`, compartido por ambos entornos mediante la red Docker externa `web`:
+- Publica 80 y 443; redirige HTTP → HTTPS; certificados automáticos de **Let's Encrypt** (desafío HTTP-01) guardados en `acme.json`; solo enruta contenedores con `traefik.enable=true`; sin dashboard expuesto.
+
+**Decisiones del usuario**: QA **sin protección extra** (solo el login de la app). **Sin respaldos automáticos** de la base de producción por ahora.
+
+**Antes del dominio**: el pipeline despliega y verifica la salud de la app dentro del servidor; el acceso HTTPS empieza cuando existan los registros DNS (Let's Encrypt emite el certificado en la primera visita).
+
+**Dominio (siguiente etapa)**: `jolscripts.com` en HostGator. QA → `qa.trackapp.jolscripts.com`, Prod → `app.trackapp.jolscripts.com` (registros A al IP del servidor). Pendiente decidir si se usa Cloudflare: con subdominios de dos niveles, el certificado gratuito de Cloudflare (`*.jolscripts.com`) **no los cubre** si el proxy (nube naranja) está activo.
+
+**Guía de instalación del servidor**: `deploy/README.md` (pasos que ejecuta el usuario: usuario `deploy`, carpetas, `.env`, red `web`, Traefik, secretos de GitHub).
 
 ---
 
