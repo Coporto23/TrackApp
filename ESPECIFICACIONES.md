@@ -356,6 +356,7 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
 - **`package-lock.json` generado en Windows**: npm omitió dependencias opcionales de Linux (`@emnapi/*`) y `npm ci` falla en Docker/CI. Si vuelve a pasar, regenerar el lock dentro de un contenedor Linux (`npm install --package-lock-only --ignore-scripts` en `node:24.21.0-bookworm-slim`) y comprobar que solo agrega entradas.
 - **`output: "standalone"`**: `next start` sigue funcionando para las pruebas locales, pero avisa que en producción se use `node .next/standalone/server.js` (lo hace la imagen).
 - **Docker se salta UFW**: los puertos publicados por contenedores quedan abiertos aunque UFW no los permita. Solo Traefik publica puertos.
+- **`tsc` en un checkout limpio (CI)**: los tipos globales `PageProps`/`LayoutProps` los genera Next en `.next/types`; sin build previo `tsc` falla con "Cannot find name 'PageProps'". Correr `next typegen` antes.
 - **Next 16 conserva la página anterior oculta**: en las E2E puede haber dos `<main>`; usar `main:visible`.
 
 ---
@@ -383,7 +384,7 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
 - **Docker se salta UFW**: un puerto publicado por un contenedor queda expuesto aunque UFW no lo permita. Solo el proxy (Traefik) publica 80/443; la app y las bases no publican puertos.
 
 **Pipeline (GitHub Actions, `.github/workflows/deploy.yml`)** — se dispara con push a `develop` (QA) o `main` (Prod):
-1. **Validar**: `npm ci` (incluye `prisma generate`), `tsc --noEmit`, `lint`; el `next build` ocurre al construir la imagen. Si algo falla, no se despliega.
+1. **Validar**: `npm ci` (incluye `prisma generate`), `next typegen`, `tsc --noEmit`, `lint`; el `next build` ocurre al construir la imagen. Si algo falla, no se despliega.
 2. **Construir y publicar** en GitHub Container Registry (`ghcr.io/coporto23/trackapp`), etiquetado con el SHA del commit: imagen `app` (`:<sha>`) e imagen `migrate` (`:<sha>-migrate`) *(técnica)*.
 3. **Desplegar** por SSH con el usuario `deploy` (clave dedicada, verificación del host con `known_hosts`): copia `docker-compose.prod.yml` y `deploy/deploy.sh` a `/opt/trackapp/<entorno>/` y ejecuta el script, que escribe `image.env` (`IMAGE_TAG=<sha>`), inicia sesión en GHCR con el **token temporal del job** (llega por stdin; sin secretos extra, sirva la imagen pública o privada), descarga las imágenes, levanta la base, **corre las migraciones** (`compose run --rm migrate`) y levanta la app con `--wait`. Si la app no queda sana (healthcheck), el job falla.
 - Un despliegue a la vez por entorno (`concurrency`). Los despliegues quedan registrados en los GitHub Environments `qa` y `production`. Secretos **del repositorio** (mismo servidor para ambos): `SSH_HOST`, `SSH_USER`, `SSH_KEY`, `SSH_KNOWN_HOSTS`.

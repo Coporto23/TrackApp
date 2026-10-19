@@ -27,6 +27,8 @@ jobs:
           node-version: 24.21.0
           cache: npm
       - run: npm ci
+      # Tipos de rutas (PageProps, LayoutProps): sin build previo no existen en .next/types.
+      - run: npx next typegen
       - run: npx tsc --noEmit
       - run: npm run lint
 
