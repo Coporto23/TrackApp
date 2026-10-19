@@ -6,6 +6,8 @@
 
 ## Estado actual
 
+> **2026-10-19 — MVP completo y en QA.** La app está en línea en https://qa.trackapp.jolscripts.com (despliegue automático desde `develop`). **Producción no se despliega** hasta que el usuario tenga una versión más trabajada (decisión del usuario).
+
 | Fase | Paso | Estado |
 |---|---|---|
 | 1. Inicialización y BD | 1. Next.js + Tailwind | ✅ Finalizado |
@@ -21,23 +23,33 @@
 | | 11. Registro de series | ✅ Finalizado (integrado en el calendario) |
 | 5. Dashboard | 12. Dashboard de progresión | ✅ Finalizado |
 | | 13. PWA instalable | ❌ Descartado por el usuario |
-| 6. Docker VPS | 14. Dockerfile de producción | ✅ Listo (validado en local) |
-| | 15. `docker-compose.prod.yml` + Traefik + pipeline | 🛠️ Listo en el repo; falta configurar el servidor y el dominio |
+| 6. Despliegue | 14. Dockerfile de producción | ✅ Finalizado |
+| | 15. `docker-compose.prod.yml` + Traefik + pipeline | ✅ QA en línea · ⏸️ Producción en pausa (decisión del usuario) |
+| 7. Post-MVP | Iteraciones según el backlog | ⏭️ Siguiente (a priorizar con el usuario) |
 
-**Commits en `main`**: `b052645` init · `4d591c1` Prisma + seeding · `5afe2f0` auth + layout · `3d95d53` ejercicios · `7a3f369` rutinas · `035077e` calendario + series (pasos 10–11) · dashboard (paso 12).
+**Commits en `main`**: `b052645` init · `4d591c1` Prisma + seeding · `5afe2f0` auth + layout · `3d95d53` ejercicios · `7a3f369` rutinas · `035077e` calendario + series (pasos 10–11) · `cd8fa40` dashboard (paso 12) · `2dc6e0c` PWA descartada.
+
+**Commits en `develop`** (además de los de `main`): `d8b0836` Docker + Traefik + pipeline · `9a7aa63` `next typegen` en CI · documentación de cierre del MVP. `main` aún no los tiene: llegarán con el primer despliegue a Producción.
 
 ---
 
 ## Pendientes y decisiones abiertas
 
+- **Producción**: primer despliegue (merge `develop` → `main`) **cuando el usuario lo decida**. El servidor ya tiene `/opt/trackapp/prod/.env` y el DNS de `app.trackapp.jolscripts.com`.
+- **Validación de QA por el usuario**: recorrer registro, ejercicios, rutinas, calendario, series y dashboard en https://qa.trackapp.jolscripts.com.
+- **Recomendado (usuario, en GitHub)**: proteger `main` (solo merges por Pull Request).
+- **CI**: actualizar `actions/checkout` y `actions/setup-node` a `v5` (GitHub avisa que `v4` usa Node 20, en retiro).
+- **Datos de prueba locales**: 51 sesiones de demostración en la cuenta local del usuario; se borran con `seed-demo.mjs --undo` (scratchpad de Claude).
 - **Mejoras futuras acordadas**:
   - Dashboard: tarjeta de **récords personales** (excluida del paso 12 por el usuario).
   - Dashboard: alguna forma de **graficar la progresión en niveles** (hoy solo aparecen en la tabla).
   - Login con Google (próxima iteración): provider de Google, `password` opcional (migración) y creación con `createUserWithDefaults()` (buscar o crear por email).
   - Volver a la página solicitada (`callbackUrl`) tras el login; hoy siempre va a Inicio.
-  - Límite de intentos de login (proponer junto al despliegue).
+  - Límite de intentos de login (más relevante ahora que QA está en internet con registro abierto).
   - Selector de ejercicios: mostrar el recién creado al inicio de la lista.
   - Revisar las 5 vulnerabilidades "high" de `npm audit` en dependencias de terceros (sin `--force`).
+  - Respaldos automáticos de la base de Producción (descartados por ahora; retomar antes de tener usuarios reales).
+  - Reinicio automático del servidor tras parches de kernel (opcional; implica cortes breves).
 
 ---
 
@@ -210,4 +222,16 @@
   - La guía usaba `#` como prompt del servidor: al copiar, bash lo toma como comentario. Se reescribió con bloques etiquetados.
 - **Validación (local)**: imágenes construidas con Docker Desktop; stack simulado (red `web`, Traefik, db, migrate, app): 4 migraciones aplicadas, app sana, HTTP → HTTPS (301), subdominio correcto 200 y desconocido 404; humo con navegador por HTTPS a través de Traefik (registro, cookies `__Secure-`, todas las páginas, cerrar sesión e iniciar de nuevo) **OK**. `actionlint` y `shellcheck` sin observaciones; `tsc`, `lint` y `build` OK. Stack local de prueba eliminado.
 - **Pendiente**: el usuario configura el servidor y los secretos según `deploy/README.md`; luego push de `develop` (primer despliegue a QA) y la etapa del dominio (HostGator; decidir si se usa Cloudflare).
-- **Primer pipeline (`d8b0836`)**: falló en *Validar*: `tsc` no encontraba `PageProps`/`LayoutProps` en el checkout limpio de GitHub (en local existían por builds previos). Reproducido en un clon limpio (11 errores → 0 tras `next typegen`). **Solución**: paso `next typegen` antes de `tsc` en el workflow.
+- **Primer pipeline (`d8b0836`)**: falló en *Validar*: `tsc` no encontraba `PageProps`/`LayoutProps` en el checkout limpio de GitHub (en local existían por builds previos). Reproducido en un clon limpio (11 errores → 0 tras `next typegen`). **Solución**: paso `next typegen` antes de `tsc` en el workflow.- **Dominio (Usuario)**: registros A en HostGator para `qa.trackapp.jolscripts.com` y `app.trackapp.jolscripts.com` → `2.28.3.145` (DNS directo, **sin Cloudflare**: no aplica el límite de certificados con subdominios de dos niveles).
+- **Despliegue a QA**: el paso SSH falló con "Host key verification failed" (secreto `SSH_KNOWN_HOSTS` sin la huella correcta). El usuario lo corrigió con la línea de `ssh-keyscan -t ed25519 2.28.3.145` y relanzó el job: **despliegue OK**.
+- **QA en línea**: `https://qa.trackapp.jolscripts.com` con certificado de Let's Encrypt válido (emitido 2026-10-19, vence 2027-01-17, renovación automática), HTTP → HTTPS y `callbackUrl` con el dominio público.
+
+---
+
+## 2026-10-19
+
+### Cierre del MVP
+- **Decisión (Usuario)**: el MVP se da por terminado y queda **en QA**. **No se sube nada a Producción** hasta tener una versión más trabajada.
+- Se explicó qué se recupera solo (despliegues, reinicios del servidor, caídas de la app, certificados) y qué es manual (reinicio tras parches de kernel, `apt upgrade`, cambios en `.env` o Traefik); quedó en `ESPECIFICACIONES.md` § 10.1.
+- **Documentación actualizada** a pedido del usuario: `CLAUDE.md` (entornos, flujo de ramas, restricción de no desplegar Producción, QA/Prod en las reglas de BD, stack y plan con la Fase 7 post-MVP), `ESPECIFICACIONES.md` (estado, tabla de entornos, dominio sin Cloudflare, mantenimiento, gotcha de `SSH_KNOWN_HOSTS`) y esta bitácora (estado, commits por rama, pendientes y backlog).
+

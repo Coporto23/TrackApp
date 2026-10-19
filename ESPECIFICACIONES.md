@@ -1,5 +1,7 @@
 # TrackApp — Especificaciones Técnicas
 
+> **Estado (2026-10-19)**: MVP completo (pasos 1–12) y **en línea en QA** (https://qa.trackapp.jolscripts.com). Producción configurada pero **sin desplegar** por decisión del usuario.
+>
 > Especificación **vigente** del sistema. Se actualiza cada vez que cambia algo técnico (modelo de datos, componentes, convenciones, estilos). Las reglas de trabajo y restricciones están en `CLAUDE.md`; el historial de avance y decisiones, en `bitacora.md`.
 
 ---
@@ -374,13 +376,18 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
 
 > Acordado con el usuario el 2026-10-18. Las decisiones marcadas *(técnica)* son de Claude.
 
+| Entorno | URL | Rama | Carpeta en el VPS | Estado |
+|---|---|---|---|---|
+| QA | https://qa.trackapp.jolscripts.com | `develop` | `/opt/trackapp/qa` | En línea desde 2026-10-19 (certificado Let's Encrypt, renovación automática) |
+| Producción | https://app.trackapp.jolscripts.com | `main` | `/opt/trackapp/prod` | `.env` y DNS listos; **sin desplegar** hasta que el usuario lo decida |
+
 **Flujo de trabajo (decisión del usuario)**
 1. Cada cambio se trabaja en local en una **rama propia** (`feat/…`, `fix/…`), creada desde `develop`.
 2. Merge de la rama a **`develop`** → despliegue automático en **QA**, donde se valida.
 3. Con QA aprobado, merge de `develop` a **`main`** → despliegue automático en **Producción**.
-- `develop` se crea a partir de `main`. *(técnica)* Se recomienda proteger `main` en GitHub (solo merges vía Pull Request), configuración que hace el usuario.
+- `develop` existe desde 2026-10-18 (creada desde `main`). *(técnica)* Se recomienda proteger `main` en GitHub (solo merges vía Pull Request), configuración que hace el usuario.
 
-**Servidor**: VPS Hetzner **x86_64**, Ubuntu 24.04, Docker + Compose plugin instalados, UFW con 22/80/443. Tamaño no informado: por eso **la imagen se construye en GitHub (solo `linux/amd64`) y el servidor solo la descarga** *(técnica)*.
+**Servidor**: VPS Hetzner **x86_64** (`2.28.3.145`), Ubuntu 24.04, Docker + Compose plugin instalados, UFW con 22/80/443. Tamaño no informado: por eso **la imagen se construye en GitHub (solo `linux/amd64`) y el servidor solo la descarga** *(técnica)*.
 - **Docker se salta UFW**: un puerto publicado por un contenedor queda expuesto aunque UFW no lo permita. Solo el proxy (Traefik) publica 80/443; la app y las bases no publican puertos.
 
 **Pipeline (GitHub Actions, `.github/workflows/deploy.yml`)** — se dispara con push a `develop` (QA) o `main` (Prod):
@@ -389,29 +396,32 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
 3. **Desplegar** por SSH con el usuario `deploy` (clave dedicada, verificación del host con `known_hosts`): copia `docker-compose.prod.yml` y `deploy/deploy.sh` a `/opt/trackapp/<entorno>/` y ejecuta el script, que escribe `image.env` (`IMAGE_TAG=<sha>`), inicia sesión en GHCR con el **token temporal del job** (llega por stdin; sin secretos extra, sirva la imagen pública o privada), descarga las imágenes, levanta la base, **corre las migraciones** (`compose run --rm migrate`) y levanta la app con `--wait`. Si la app no queda sana (healthcheck), el job falla.
 - Un despliegue a la vez por entorno (`concurrency`). Los despliegues quedan registrados en los GitHub Environments `qa` y `production`. Secretos **del repositorio** (mismo servidor para ambos): `SSH_HOST`, `SSH_USER`, `SSH_KEY`, `SSH_KNOWN_HOSTS`.
 - **Prod reconstruye la imagen desde `main`** *(técnica)*: `main` recibe exactamente lo validado en `develop`, así que el código es el mismo de QA; promover la misma imagen exigiría reglas de merge más estrictas.
-- **Volver atrás**: re-ejecutar el workflow de un commit anterior, o en el servidor poner el SHA anterior en `image.env` y `docker compose … up -d`.
+- **Volver atrás**: re-ejecutar el workflow de un commit anterior, o en el servidor `sudo -u deploy bash /opt/trackapp/<entorno>/deploy.sh <entorno> <sha-anterior>`.
 
 **Imagen (`Dockerfile`, multi-stage, `node:24.21.0-bookworm-slim`)** *(técnica)*
 - Next con `output: "standalone"`: la imagen `app` lleva solo el servidor mínimo, `public/` y `.next/static`; corre como usuario no root en el puerto 3000.
-- La imagen `migrate` lleva las dependencias completas y `prisma/`, y ejecuta `prisma migrate deploy` (no destructivo). Corre una vez antes de la app en cada despliegue (`depends_on: service_completed_successfully`).
+- La imagen `migrate` lleva las dependencias completas y `prisma/`, y ejecuta `prisma migrate deploy` (no destructivo). `deploy.sh` la corre una vez (`compose run --rm migrate`) antes de actualizar la app.
+- La imagen base instala `openssl` (lo necesita el motor de migraciones de Prisma).
 - Sin secretos dentro de la imagen; todo llega por variables de entorno en tiempo de ejecución.
 
 **Composición por entorno (`docker-compose.prod.yml`, la misma para QA y Prod)** — en `/opt/trackapp/qa` y `/opt/trackapp/prod`, con proyecto `trackapp-qa` / `trackapp-prod`:
 - `db`: `postgres:16.15-alpine`, volumen propio, healthcheck, sin puertos. **Cada entorno tiene su propia base** (QA nunca toca datos de Prod).
 - `migrate`: corre las migraciones y termina (perfil `migrate`: `up` no lo levanta; el script lo ejecuta con `run`).
 - `app`: la imagen del SHA desplegado, `AUTH_TRUST_HOST=true`, **`AUTH_URL=https://${APP_HOST}`** (ver Gotchas), healthcheck sobre `/login`, etiquetas de Traefik con `Host(${APP_HOST})` y HTTPS.
-- `.env` del servidor (lo crea el usuario, nunca se versiona): `APP_HOST`, `POSTGRES_PASSWORD`, `AUTH_SECRET` (distinto por entorno). `image.env` lo escribe el pipeline.
+- `.env` del servidor (lo crea el usuario, nunca se versiona): `ENV_NAME`, `APP_HOST`, `POSTGRES_PASSWORD` (hex, sin caracteres especiales), `AUTH_SECRET` (distinto por entorno). `image.env` lo escribe el pipeline.
 
 **Proxy (`deploy/traefik/docker-compose.yml`, `traefik:v3.7.13`)** — en `/opt/trackapp/traefik`, compartido por ambos entornos mediante la red Docker externa `web`:
 - Publica 80 y 443; redirige HTTP → HTTPS; certificados automáticos de **Let's Encrypt** (desafío HTTP-01) guardados en `acme.json`; solo enruta contenedores con `traefik.enable=true`; sin dashboard expuesto.
 
 **Decisiones del usuario**: QA **sin protección extra** (solo el login de la app). **Sin respaldos automáticos** de la base de producción por ahora.
 
-**Antes del dominio**: el pipeline despliega y verifica la salud de la app dentro del servidor; el acceso HTTPS empieza cuando existan los registros DNS (Let's Encrypt emite el certificado en la primera visita).
+**Dominio**: `jolscripts.com` con DNS en HostGator. Registros A `qa.trackapp` y `app.trackapp` → `2.28.3.145`. **Sin Cloudflare** (si se agregara con la nube naranja, su certificado gratuito `*.jolscripts.com` no cubre subdominios de dos niveles). Let's Encrypt emite cada certificado en la primera visita.
 
-**Dominio (siguiente etapa)**: `jolscripts.com` en HostGator. QA → `qa.trackapp.jolscripts.com`, Prod → `app.trackapp.jolscripts.com` (registros A al IP del servidor). Pendiente decidir si se usa Cloudflare: con subdominios de dos niveles, el certificado gratuito de Cloudflare (`*.jolscripts.com`) **no los cubre** si el proxy (nube naranja) está activo.
+**Mantenimiento del servidor** (lo hace el usuario): las actualizaciones de la app y los reinicios del servidor se recuperan solos (`restart: unless-stopped`); los parches de Ubuntu se instalan solos pero un reinicio por kernel es manual (`/var/run/reboot-required`); cambios en `.env` o en Traefik requieren recrear el contenedor (relanzar el despliegue o `docker compose up -d`).
 
-**Guía de instalación del servidor**: `deploy/README.md` (pasos que ejecuta el usuario: usuario `deploy`, carpetas, `.env`, red `web`, Traefik, secretos de GitHub).
+**Guía de instalación del servidor**: `deploy/README.md` (pasos que ejecuta el usuario: usuario `deploy`, carpetas, `.env`, red `web`, Traefik, secretos de GitHub; flujo diario y operación).
+
+**Gotcha del primer despliegue**: `SSH_KNOWN_HOSTS` debe ser exactamente la línea de `ssh-keyscan -t ed25519 <IP>` contra el **mismo IP** de `SSH_HOST`; si no, `scp` falla con "Host key verification failed" (exit 255).
 
 ---
 
@@ -430,6 +440,7 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
 
 ## 12. Comandos
 
+- Despliegue: push a `develop` (QA) / merge a `main` (Producción); seguimiento en GitHub → Actions. Operación del servidor: `deploy/README.md`.
 - `docker compose up -d` / `docker compose down` — PostgreSQL local.
 - `npm run dev` — desarrollo (http://localhost:3000).
 - `npm run build` + `npm run start` — build y servidor de producción local.
