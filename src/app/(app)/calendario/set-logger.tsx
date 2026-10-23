@@ -145,16 +145,19 @@ function EditSetForm({ set, onDone }: { set: LoggedSet; onDone: () => void }) {
           </IconButton>
         </form>
       </div>
-      <form action={action}>
+      {/* Guardar y Cancelar en su propia fila: junto a los campos aplastaban el
+          select de unidad en un celular (la tarjeta mide ~240px). */}
+      <form action={action} className="space-y-1.5">
         <input type="hidden" name="id" value={set.id} />
-        <SetFields idPrefix={`edit-${set.id}`} defaults={set} state={state}>
-          <IconButton label="Guardar serie" tone="ember" className="h-10! w-9!">
-            <CheckIcon className="h-5 w-5" />
-          </IconButton>
-          <IconButton label="Cancelar edición" type="button" onClick={onDone} className="h-10! w-9!">
+        <SetFields idPrefix={`edit-${set.id}`} defaults={set} state={state} />
+        <div className="flex justify-end gap-2">
+          <IconButton label="Cancelar edición" type="button" onClick={onDone}>
             <CloseIcon className="h-5 w-5" />
           </IconButton>
-        </SetFields>
+          <IconButton label="Guardar serie" tone="ember">
+            <CheckIcon className="h-5 w-5" />
+          </IconButton>
+        </div>
       </form>
     </div>
   );
@@ -171,7 +174,7 @@ function SetFields({
   idPrefix: string;
   defaults?: Partial<Omit<LoggedSet, "id">>;
   state: SetFormState;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   const errors = state?.fieldErrors;
   const message = state?.error ?? errors?.reps?.[0] ?? errors?.load?.[0] ?? errors?.unit?.[0];

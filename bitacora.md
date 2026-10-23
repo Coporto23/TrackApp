@@ -235,3 +235,13 @@
 - Se explicó qué se recupera solo (despliegues, reinicios del servidor, caídas de la app, certificados) y qué es manual (reinicio tras parches de kernel, `apt upgrade`, cambios en `.env` o Traefik); quedó en `ESPECIFICACIONES.md` § 10.1.
 - **Documentación actualizada** a pedido del usuario: `CLAUDE.md` (entornos, flujo de ramas, restricción de no desplegar Producción, QA/Prod en las reglas de BD, stack y plan con la Fase 7 post-MVP), `ESPECIFICACIONES.md` (estado, tabla de entornos, dominio sin Cloudflare, mantenimiento, gotcha de `SSH_KNOWN_HOSTS`) y esta bitácora (estado, commits por rama, pendientes y backlog).
 
+---
+
+## 2026-10-22
+
+### Fase 7 — Fix: editar una serie en el celular (`fix/ui-edicion-series`)
+- **Bug (Usuario, reportado en QA)**: a 390 px, al editar una serie en el calendario el selector de unidad (kg/lbs/nivel) no se veía ni se podía usar.
+- **Causa**: en la edición, Guardar y Cancelar iban en la misma fila que Reps (48 px), Peso (64 px) y Unidad (`flex-1`), dentro de una tarjeta de ~240 px. El `<select>` era lo único que se encogía y quedaba en **13 px**. Además, los botones medían 36×40, bajo el mínimo de 44 px.
+- **Solución (Técnica)**: Guardar y Cancelar pasan a una **fila propia bajo los campos** (`flex justify-end gap-2`), a su tamaño completo de 44 px y en el orden Cancelar · Guardar, como en los modales. La fila de campos queda igual que la de "nueva serie" (`SetFields` acepta `children` opcional). El formulario de nueva serie no cambia.
+- **Validación**: `tsc`, `lint` y `build` OK. E2E nueva (`e2e-edit-set.mjs`, scratchpad) a 390 y 360 px **en `next dev` y en `next start`**: el select pasa de 13 a 97 px (67 px a 360) sin superponerse, botones de 44×44 dentro de la tarjeta, sin scroll horizontal, cambiar a lbs y guardar persiste, cancelar no modifica la serie y la nueva serie sigue en una fila. Capturas revisadas. Usuarios `e2e-…` borrados.
+
