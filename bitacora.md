@@ -249,3 +249,7 @@
 - **Nota**: el CLI `gh` no está instalado en el equipo del usuario; el pipeline se siguió con la API pública de GitHub.
 - **Pendiente**: que el usuario valide el fix en QA desde su celular.
 
+### Regla de documentación antes del merge
+- **Decisión (Usuario)**: no hacer push a `develop` solo de documentación (cada push redespliega QA). La bitácora y las especificaciones se actualizan **en la rama de trabajo al aprobarse el cambio y antes del merge a `develop`**; lo posterior (pipeline, verificación de QA) se registra con el siguiente cambio. Quedó en `CLAUDE.md` § 2.6.
+- Los commits de documentación del fix (`f89b550`) y esta regla quedan en `develop` **local, sin push**: viajarán con el próximo cambio.
+
