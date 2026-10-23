@@ -25,11 +25,11 @@
 | | 13. PWA instalable | ❌ Descartado por el usuario |
 | 6. Despliegue | 14. Dockerfile de producción | ✅ Finalizado |
 | | 15. `docker-compose.prod.yml` + Traefik + pipeline | ✅ QA en línea · ⏸️ Producción en pausa (decisión del usuario) |
-| 7. Post-MVP | Iteraciones según el backlog | ⏭️ Siguiente (a priorizar con el usuario) |
+| 7. Post-MVP | Iteraciones según el backlog | 🔄 En curso: estabilización (fix de edición de series en QA, 2026-10-22) |
 
 **Commits en `main`**: `b052645` init · `4d591c1` Prisma + seeding · `5afe2f0` auth + layout · `3d95d53` ejercicios · `7a3f369` rutinas · `035077e` calendario + series (pasos 10–11) · `cd8fa40` dashboard (paso 12) · `2dc6e0c` PWA descartada.
 
-**Commits en `develop`** (además de los de `main`): `d8b0836` Docker + Traefik + pipeline · `9a7aa63` `next typegen` en CI · documentación de cierre del MVP. `main` aún no los tiene: llegarán con el primer despliegue a Producción.
+**Commits en `develop`** (además de los de `main`): `d8b0836` Docker + Traefik + pipeline · `9a7aa63` `next typegen` en CI · documentación de cierre del MVP · `406aac1` fix de edición de series en el celular (merge `1f24c31`). `main` aún no los tiene: llegarán con el primer despliegue a Producción.
 
 ---
 
@@ -244,4 +244,8 @@
 - **Causa**: en la edición, Guardar y Cancelar iban en la misma fila que Reps (48 px), Peso (64 px) y Unidad (`flex-1`), dentro de una tarjeta de ~240 px. El `<select>` era lo único que se encogía y quedaba en **13 px**. Además, los botones medían 36×40, bajo el mínimo de 44 px.
 - **Solución (Técnica)**: Guardar y Cancelar pasan a una **fila propia bajo los campos** (`flex justify-end gap-2`), a su tamaño completo de 44 px y en el orden Cancelar · Guardar, como en los modales. La fila de campos queda igual que la de "nueva serie" (`SetFields` acepta `children` opcional). El formulario de nueva serie no cambia.
 - **Validación**: `tsc`, `lint` y `build` OK. E2E nueva (`e2e-edit-set.mjs`, scratchpad) a 390 y 360 px **en `next dev` y en `next start`**: el select pasa de 13 a 97 px (67 px a 360) sin superponerse, botones de 44×44 dentro de la tarjeta, sin scroll horizontal, cambiar a lbs y guardar persiste, cancelar no modifica la serie y la nueva serie sigue en una fila. Capturas revisadas. Usuarios `e2e-…` borrados.
+- **Entorno**: Docker Desktop estaba apagado; se inició para la BD local. El dev server del usuario (puerto 3000) no corría: las pruebas usaron servidores propios en el 3100, ya detenidos.
+- **Cierre**: el usuario aprobó el cambio. Commit `406aac1`, merge a `develop` (`1f24c31`) y push con aprobación del usuario. Pipeline [39888221243](https://github.com/Coporto23/TrackApp/actions/runs/39888221243): Validar, Construir imagen y Desplegar **OK**. QA verificado: `/login` 200 por HTTPS y HTTP → HTTPS (301).
+- **Nota**: el CLI `gh` no está instalado en el equipo del usuario; el pipeline se siguió con la API pública de GitHub.
+- **Pendiente**: que el usuario valide el fix en QA desde su celular.
 
