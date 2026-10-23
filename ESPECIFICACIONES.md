@@ -1,6 +1,6 @@
 # TrackApp — Especificaciones Técnicas
 
-> **Estado (2026-10-19)**: MVP completo (pasos 1–12) y **en línea en QA** (https://qa.trackapp.jolscripts.com). Producción configurada pero **sin desplegar** por decisión del usuario.
+> **Estado (2026-10-22)**: MVP completo (pasos 1–12) y **en línea en QA** (https://qa.trackapp.jolscripts.com); en curso la estabilización post-MVP (Fase 7). Producción configurada pero **sin desplegar** por decisión del usuario.
 >
 > Especificación **vigente** del sistema. Se actualiza cada vez que cambia algo técnico (modelo de datos, componentes, convenciones, estilos). Las reglas de trabajo y restricciones están en `CLAUDE.md`; el historial de avance y decisiones, en `bitacora.md`.
 
@@ -182,7 +182,7 @@ Todas las entidades usan id `cuid()`; las principales tienen `createdAt`.
   - Día con entrenamiento: **tarjeta tipo evento** (borde ember) con el título y "N ejercicios · M series". Tocarla selecciona el día (`?d=`) y la despliega.
 - **Tarjeta desplegada** (día seleccionado): título, eliminar, "Ejercicios · N" con "+" (selector con "crear nuevo"), lista ordenable. **Tocar un ejercicio despliega su registro de series**:
   - "Última vez (17 oct): 82,5×8 · 82,5×6 kg".
-  - Series registradas ("1 · 8 reps × 82,5 kg"); tocar una la abre para editar o eliminar.
+  - Series registradas ("1 · 8 reps × 82,5 kg"); tocar una la abre para editar o eliminar: cabecera "Editar serie N" con papelera, la fila Reps · Peso/Nivel · Unidad (igual que la de nueva serie) y debajo, alineados a la derecha, **Cancelar · Guardar** (44 px).
   - Formulario "Serie N": Reps · Peso/Nivel · Unidad (`<select>` kg/lbs/nivel) · "+".
   - Al pie, si difiere de la rutina: enlace discreto "Actualizar plantilla «…» con este día…".
 
@@ -359,6 +359,7 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
 - **`output: "standalone"`**: `next start` sigue funcionando para las pruebas locales, pero avisa que en producción se use `node .next/standalone/server.js` (lo hace la imagen).
 - **Docker se salta UFW**: los puertos publicados por contenedores quedan abiertos aunque UFW no los permita. Solo Traefik publica puertos.
 - **`tsc` en un checkout limpio (CI)**: los tipos globales `PageProps`/`LayoutProps` los genera Next en `.next/types`; sin build previo `tsc` falla con "Cannot find name 'PageProps'". Correr `next typegen` antes.
+- **Ancho de la tarjeta del día en el celular**: el registro de series vive dentro de la tarjeta desplegada, con solo ~240 px útiles a 390 px (~210 px a 360). La fila de campos de una serie (Reps 48 px · Peso 64 px · Unidad `flex-1`) admite **un solo botón** al lado; con más, el `<select>` de unidad se aplasta (bug corregido el 2026-10-22: con Guardar y Cancelar en la fila quedaba en 13 px). Acciones extra van en una fila propia debajo.
 - **Next 16 conserva la página anterior oculta**: en las E2E puede haber dos `<main>`; usar `main:visible`.
 
 ---
