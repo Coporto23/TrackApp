@@ -47,9 +47,10 @@ Servidor: VPS Hetzner (Ubuntu 24.04, x86_64) con Docker y Traefik. DNS en HostGa
    - Con QA aprobado, merge de `develop` a **`main`** (Pull Request) → despliegue automático a **Producción**.
    - **Commit + push solo con aprobación del usuario.** Un push a `develop` o `main` **despliega**: tratarlo como tal. Mensajes con prefijo convencional (`feat:`, `fix:`, `docs:`, `ci:`…).
    - Tras cada push que despliega, **seguir el pipeline** (GitHub Actions) hasta su resultado y verificar el entorno (HTTPS, `/login`).
-6. **Documentación al cerrar cada paso**:
+6. **Documentación al cerrar cada paso** (decisión del usuario, 2026-10-22): se actualiza **en la rama de trabajo, cuando el usuario aprueba el cambio y antes del merge a `develop`**, en el mismo commit del cambio o en uno adicional de esa rama. Así llega a `develop` en el mismo push y **no hay pushes ni despliegues solo de documentación**.
    - `bitacora.md`: registrar avance, decisiones y problemas (siempre).
    - `ESPECIFICACIONES.md`: actualizar si cambió algo técnico (modelo, componentes, convenciones, estilos, despliegue).
+   - Lo que ocurre después del merge (resultado del pipeline, verificación de QA) se informa al usuario y se registra en la bitácora **con el siguiente cambio**, no con un commit aparte.
    - `CLAUDE.md`: **no se edita** salvo que cambien las reglas, las restricciones o el plan (y con acuerdo del usuario).
 7. **El usuario itera sobre el diseño y la UX**: ante feedback, aplicar el cambio, volver a validar y mostrar el resultado. Las preferencias confirmadas pasan a ser convenciones (ver `ESPECIFICACIONES.md` → Convenciones UX).
 
