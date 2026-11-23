@@ -4,7 +4,7 @@ import { DEFAULT_EXERCISES } from "./default-exercises";
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
 // Copia los ejercicios base al usuario indicado. Se invoca justo después de
-// crear el usuario (idealmente en la misma transacción del registro, Fase 2).
+// crear el usuario, dentro de la misma transacción del registro.
 // Es idempotente: skipDuplicates respeta el único (userId, name).
 export async function seedUserExercises(db: DbClient, userId: string) {
   const { count } = await db.exercise.createMany({

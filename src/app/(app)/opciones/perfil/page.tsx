@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { logout } from "@/actions/auth";
+import { BackLink } from "@/components/back-link";
 import { PageHeader } from "@/components/page-header";
 import { Panel } from "@/components/panel";
 import { getCurrentUser } from "@/lib/dal";
@@ -10,6 +11,7 @@ export const metadata: Metadata = { title: "Perfil" };
 export default function ProfilePage() {
   return (
     <>
+      <BackLink href="/opciones" label="Más opciones" />
       <PageHeader title="Perfil" />
       <div className="space-y-4">
         <Suspense fallback={<p className="text-fog">Leyendo el pergamino…</p>}>

@@ -62,6 +62,39 @@ export function HelmIcon(props: IconProps) {
   );
 }
 
+// Más opciones: tres barras, cada una con un rombo.
+export function MenuIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9.5 6h11M9.5 12h11M9.5 18h11" />
+      {[6, 12, 18].map((y) => (
+        <path key={y} d={`m5 ${y - 1.8} 1.8 1.8L5 ${y + 1.8} 3.2 ${y}Z`} fill="currentColor" stroke="none" />
+      ))}
+    </Icon>
+  );
+}
+
+// Ajustes: engranaje octogonal con un rombo al centro.
+export function GearIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10 2.5h4l.8 2.8 2.6 1.1 2.6-1.4 2 3.5-2.2 2v2.9l2.2 2-2 3.5-2.6-1.4-2.6 1.1-.8 2.9h-4l-.8-2.9-2.6-1.1-2.6 1.4-2-3.5 2.2-2V10.5l-2.2-2 2-3.5 2.6 1.4 2.6-1.1Z" />
+      <path d="m12 9 3 3-3 3-3-3Z" fill="currentColor" />
+    </Icon>
+  );
+}
+
+// Documentación: pergamino enrollado.
+export function ScrollIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 3.5h12l-1.5 2v13H5.5V5.5Z" />
+      <path d="M4 18.5h13.5l1.5 2H5.5Z" />
+      <path d="M9 9h6M9 12.5h6M9 16h3.5" />
+    </Icon>
+  );
+}
+
 // Emblema de la marca: cristal facetado con una brasa en el centro.
 export function CrestIcon(props: IconProps) {
   return (

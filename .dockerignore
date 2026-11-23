@@ -1,0 +1,17 @@
+# Fuera del contexto de la imagen: dependencias y builds locales, secretos y archivos de trabajo.
+node_modules
+.next
+src/generated
+.env
+.env.*
+!.env.example
+.git
+.github
+.claude
+.superpowers
+deploy
+*.md
+npm-debug.log*
+Dockerfile
+.dockerignore
+docker-compose*.yml

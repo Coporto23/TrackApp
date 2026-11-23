@@ -1,7 +1,6 @@
 # Entorno de DESARROLLO: PostgreSQL local para TrackApp.
 # Uso: docker compose up -d
-# El entorno de QA/Producción (Nginx/Traefik + subdominios) se define en
-# docker-compose.prod.yml durante la Fase 6.
+# QA y Producción usan docker-compose.prod.yml (con Traefik como proxy).
 services:
   db:
     image: postgres:16-alpine

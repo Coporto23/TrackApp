@@ -1,6 +1,6 @@
 // `npx prisma db seed`: asigna los ejercicios base a los usuarios existentes
 // que aún no tienen ninguno. Los usuarios nuevos los reciben automáticamente
-// al registrarse (ver seedUserExercises en el flujo de registro, Fase 2).
+// al registrarse (ver createUserWithDefaults en src/lib/users.ts).
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 import { seedUserExercises } from "../src/lib/seed-user-exercises";
