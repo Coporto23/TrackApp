@@ -25,7 +25,7 @@
 | | 13. PWA instalable | ❌ Descartado por el usuario |
 | 6. Despliegue | 14. Dockerfile de producción | ✅ Finalizado |
 | | 15. `docker-compose.prod.yml` + Traefik + pipeline | ✅ QA en línea · ⏸️ Producción en pausa (decisión del usuario) |
-| 7. Post-MVP | Iteraciones según el backlog | 🔄 En curso: estabilización (fix de edición de series en QA, 2026-10-22) |
+| 7. Post-MVP | Iteraciones según el backlog | 🔄 En curso: menú "Más" (`feat/menu-opciones`, 2026-11-23) |
 
 **Commits en `main`**: `b052645` init · `4d591c1` Prisma + seeding · `5afe2f0` auth + layout · `3d95d53` ejercicios · `7a3f369` rutinas · `035077e` calendario + series (pasos 10–11) · `cd8fa40` dashboard (paso 12) · `2dc6e0c` PWA descartada.
 
@@ -40,6 +40,8 @@
 - **Recomendado (usuario, en GitHub)**: proteger `main` (solo merges por Pull Request).
 - **CI**: actualizar `actions/checkout` y `actions/setup-node` a `v5` (GitHub avisa que `v4` usa Node 20, en retiro).
 - **Datos de prueba locales**: 51 sesiones de demostración en la cuenta local del usuario; se borran con `seed-demo.mjs --undo` (scratchpad de Claude).
+- **Menú "Más"**: definir el contenido de **Ajustes** y **Documentación** (hoy "Sendero sellado"). Puntos menores abiertos: "Cerrar sesión" aparece en el menú y en Mi Perfil; la ruta vieja `/perfil` da 404 (sin redirección); la tarjeta dice "Mi Perfil" y la página "Perfil".
+- **Next.js 16.4.2 con una vulnerabilidad conocida** (aviso "1 Insight" en dev y en `next build`): decidir con el usuario si se actualiza dentro de la 16.x (versión fijada; no se tocó).
 - **Mejoras futuras acordadas**:
   - Dashboard: tarjeta de **récords personales** (excluida del paso 12 por el usuario).
   - Dashboard: alguna forma de **graficar la progresión en niveles** (hoy solo aparecen en la tabla).
@@ -253,3 +255,18 @@
 - **Decisión (Usuario)**: no hacer push a `develop` solo de documentación (cada push redespliega QA). La bitácora y las especificaciones se actualizan **en la rama de trabajo al aprobarse el cambio y antes del merge a `develop`**; lo posterior (pipeline, verificación de QA) se registra con el siguiente cambio. Quedó en `CLAUDE.md` § 2.6.
 - Los commits de documentación del fix (`f89b550`) y esta regla quedan en `develop` **local, sin push**: viajarán con el próximo cambio.
 
+
+---
+
+## 2026-11-23
+
+### Fase 7 — Menú "Más" (`feat/menu-opciones`)
+- **Contexto**: la rama se creó el 2026-10-23 desde `develop` con el código del menú ya escrito pero **sin commits, sin validar y sin registro** en la documentación (sesión anterior interrumpida). Se revisó con el usuario en su `npm run dev`.
+- **Qué incluye**: la pestaña "Perfil" de la barra inferior pasa a **"Más"** (icono de barras con rombos) y abre `/opciones`, un menú de tarjetas con **Mi Perfil** (`/opciones/perfil`, el perfil anterior movido, con "‹ Más opciones"), **Ajustes** y **Documentación** (`/opciones/ajustes` y `/opciones/tutorial`, placeholders "Sendero sellado"), más "Cerrar sesión". Iconos nuevos: menú, engranaje y pergamino.
+- **Decisión (Usuario)**: cerrar el menú **en este estado**; el contenido de Ajustes y Documentación se hará en iteraciones posteriores. Los puntos menores (logout duplicado, 404 de `/perfil`, "Mi Perfil" vs "Perfil") quedan en pendientes.
+- **Validación**: `tsc`, `lint` y `build` OK. E2E nueva (`e2e-menu-opciones.mjs`, scratchpad) a 390×844 **en `next dev` (servidor del usuario en :3000) y en `next start` (:3100): 17/17 OK** en ambos: pestañas y opciones ≥ 44 px, pestaña "Más" activa en `/opciones/*`, perfil con el email, volver al menú, placeholders, cerrar sesión desde el menú, `/opciones` sin sesión → `/login`, sin scroll horizontal ni errores de consola. Capturas revisadas. Usuarios `e2e-…` borrados.
+- **Problemas**:
+  - La E2E contaba dos "Sendero sellado" en Documentación: Next 16 deja la página anterior (Ajustes) oculta **dentro del mismo `<main>`**. Se corrigió la prueba (contar solo visibles); la app estaba bien. Quedó en Gotchas.
+  - `next dev` y `next build` terminaron una vez con exit 1 para mostrar un **aviso de seguridad de Next.js 16.4.2**; al reintentar continúan. Es también el "1 Insight" del indicador de dev. No se actualizó Next (versión fijada): queda como pendiente para decidir con el usuario.
+- **Entorno**: Docker Desktop estaba apagado; se inició con la BD local (migraciones al día). Un `next dev` lanzado por Claude en el 3000 fue detenido por falta de memoria del equipo; luego el usuario tenía su propio servidor en el 3000. El `next start` del 3100 ya está detenido.
+- **Pendiente de lo anterior**: el pipeline del fix de edición de series (2026-10-22) quedó OK; los commits de documentación de ese cierre (`f89b550`, `455828c`) viajan con este cambio a `develop`.

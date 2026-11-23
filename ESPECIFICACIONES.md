@@ -1,6 +1,6 @@
 # TrackApp — Especificaciones Técnicas
 
-> **Estado (2026-10-22)**: MVP completo (pasos 1–12) y **en línea en QA** (https://qa.trackapp.jolscripts.com); en curso la estabilización post-MVP (Fase 7). Producción configurada pero **sin desplegar** por decisión del usuario.
+> **Estado (2026-11-23)**: MVP completo (pasos 1–12) y **en línea en QA** (https://qa.trackapp.jolscripts.com); en curso las iteraciones post-MVP (Fase 7). Producción configurada pero **sin desplegar** por decisión del usuario.
 >
 > Especificación **vigente** del sistema. Se actualiza cada vez que cambia algo técnico (modelo de datos, componentes, convenciones, estilos). Las reglas de trabajo y restricciones están en `CLAUDE.md`; el historial de avance y decisiones, en `bitacora.md`.
 
@@ -64,7 +64,9 @@ src/
         [id]/                Detalle: lista ordenable, selector de ejercicios, eliminar
       calendario/            Semana vertical, tarjetas por día, detalle del día, registro de series
       dashboard/             Filtros, 4 tarjetas de progresión (Recharts), constancia mensual y registro
-      perfil/                Datos de la cuenta + cerrar sesión
+      opciones/              Pestaña "Más": menú (Mi Perfil, Ajustes, Documentación) + cerrar sesión
+        perfil/              Datos de la cuenta + cerrar sesión
+        ajustes/, tutorial/  Placeholders "Sendero sellado" (contenido en iteraciones futuras)
     api/auth/[...nextauth]/  Handlers de Auth.js
     salir/route.ts           Cierra sesiones huérfanas (usuario borrado) sin bucle de redirección
   components/                UI reutilizable (ver sección 6)
@@ -173,7 +175,9 @@ Todas las entidades usan id `cuid()`; las principales tienen `createdAt`.
 | `/rutinas/[id]` | Título, renombrar (modal), eliminar (confirmación). Lista ordenable (manija ⠿ o teclado), ✕ para quitar, "+" → selector multi-selección con buscador y **"Crear ejercicio nuevo"** dentro del modal. |
 | `/calendario?d=YYYY-MM-DD` | Ver 5.1. Sin `d` (o fecha inválida) redirige a hoy según el navegador. |
 | `/dashboard?e=id1,,id3` | Progresión por ejercicio, constancia y registro. Ver 5.2. |
-| `/perfil` | Email, "Miembro desde", cerrar sesión. |
+| `/opciones` | Pestaña **"Más"**: menú de tarjetas (icono, título, descripción y ›) a **Mi Perfil**, **Ajustes** y **Documentación**; debajo, "Cerrar sesión". |
+| `/opciones/perfil` | "‹ Más opciones", email, "Miembro desde", cerrar sesión. (Antes `/perfil`; la ruta vieja ya no existe.) |
+| `/opciones/ajustes`, `/opciones/tutorial` | "‹ Más opciones" + `ComingSoon` ("Sendero sellado"). Su contenido se define en iteraciones futuras. |
 
 ### 5.1 Calendario
 - **Cabecera**: ‹ rango de la semana › ("12 – 18 oct 2026") e "Ir a hoy" si la semana no contiene hoy. También se cambia de semana **deslizando** horizontalmente (dedo o mouse); el gesto no se inicia sobre la manija de reordenar, campos ni modales.
@@ -277,13 +281,13 @@ Mientras la unidad elegida sea "nivel", bajo el formulario de la serie se muestr
 | `FormField` | Label + input `.field` + error accesible (`aria-invalid`, `aria-describedby`). |
 | `Modal` | Sobre `<dialog>` nativo (`showModal`): foco atrapado, Esc, clic fuera. Se monta solo mientras está abierto. |
 | `IconButton` | Botón de 44px solo con icono (`aria-label` + `title`); se deshabilita mientras su formulario se envía o con `disabled`. Tonos `default`/`ember`/`danger`. |
-| `BackLink` | Enlace "‹ Volver" en mayúsculas pequeñas. |
-| `BottomNav` | Barra inferior fija (Inicio, Calendario, Dashboard, Perfil), pestaña activa con rombo luminoso. Ejercicios/Rutinas cuentan como Inicio. |
+| `BackLink` | Enlace "‹ Volver" en mayúsculas pequeñas (destinos tipados: `/`, `/rutinas`, `/opciones`). |
+| `BottomNav` | Barra inferior fija (Inicio, Calendario, Dashboard, **Más**), pestaña activa con rombo luminoso. Ejercicios/Rutinas cuentan como Inicio; `/opciones/*` cuenta como Más. |
 | `ComingSoon` | Placeholder "Sendero sellado" para secciones futuras. |
 | `LowPolyBackdrop` | Fondo fijo: malla de triángulos determinista + resplandor de brasa inferior + viñeta. |
 | `SortableExerciseList` | Lista ordenable genérica (dnd-kit): manija, posición, nombre/nota, ✕ (con `removeBlockedReason` opcional) y **detalle desplegable** opcional (`renderDetail`). El orden es estado local optimista; los datos de cada fila vienen de las props. |
 | `ExercisePickerDialog` | Selector multi-selección con buscador y vista "Crear ejercicio nuevo"; recibe la acción (`addAction`) y los campos ocultos del destino (`{ routineId }` o `{ sessionId }`). |
-| `icons.tsx` | Iconos facetados propios: hoguera, calendario, gráfico, yelmo, emblema, +, editar, archivar, restaurar, buscar, atrás, check, cerrar, papelera, manija, chevron. |
+| `icons.tsx` | Iconos facetados propios: hoguera, calendario, gráfico, yelmo, menú (barras con rombos), engranaje, pergamino, emblema, +, editar, archivar, restaurar, buscar, atrás, check, cerrar, papelera, manija, chevron. |
 
 Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos), `session-details.tsx` (tarjeta desplegada), `set-logger.tsx` (registro de series + aviso de nivel), `assign-routine-dialog.tsx`, `delete-session-dialog.tsx`, `update-template-dialog.tsx`; `dashboard/dashboard-view.tsx` (filtros y tarjetas), `progress-chart.tsx` (línea y barras temáticas con tooltip), `exercise-select-dialog.tsx` (comparar, máx. 4), `custom-range-dialog.tsx` (Desde / Hasta), `consistency-card.tsx` (calendario mensual + detalle), `log-table.tsx` (registro por día).
 
@@ -360,7 +364,8 @@ Componentes de pantalla relevantes: `calendario/week-view.tsx` (semana + gestos)
 - **Docker se salta UFW**: los puertos publicados por contenedores quedan abiertos aunque UFW no los permita. Solo Traefik publica puertos.
 - **`tsc` en un checkout limpio (CI)**: los tipos globales `PageProps`/`LayoutProps` los genera Next en `.next/types`; sin build previo `tsc` falla con "Cannot find name 'PageProps'". Correr `next typegen` antes.
 - **Ancho de la tarjeta del día en el celular**: el registro de series vive dentro de la tarjeta desplegada, con solo ~240 px útiles a 390 px (~210 px a 360). La fila de campos de una serie (Reps 48 px · Peso 64 px · Unidad `flex-1`) admite **un solo botón** al lado; con más, el `<select>` de unidad se aplasta (bug corregido el 2026-10-22: con Guardar y Cancelar en la fila quedaba en 13 px). Acciones extra van en una fila propia debajo.
-- **Next 16 conserva la página anterior oculta**: en las E2E puede haber dos `<main>`; usar `main:visible`.
+- **Next 16 conserva la página anterior oculta**: en las E2E puede haber dos `<main>`; usar `main:visible`. Además, la página anterior puede quedar oculta **dentro del mismo `<main>`** (p. ej. al ir de Ajustes a Documentación): al contar textos usar `.filter({ visible: true })`.
+- **Aviso de seguridad de Next en dev/build**: Next 16.4.2 muestra "1 Insight" en el indicador de dev (vulnerabilidad conocida) y a veces corta `next dev`/`next build` con exit 1 para mostrar el aviso; al reintentar el comando continúa. Actualizar Next es una decisión pendiente del usuario (versión fijada).
 
 ---
 
