@@ -42,3 +42,12 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# documentación interna y archivos de trabajo (solo locales)
+/CLAUDE.md
+/AGENTS.md
+/ESPECIFICACIONES.md
+/bitacora.md
+/deploy/README.md
+.claude/
+.superpowers/

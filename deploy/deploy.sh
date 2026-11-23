@@ -10,7 +10,7 @@ GHCR_USER="${GHCR_USER:-}"
 DIR="/opt/trackapp/${ENV_NAME}"
 
 cd "$DIR"
-[[ -f .env ]] || { echo "Falta $DIR/.env (ver deploy/README.md)" >&2; exit 1; }
+[[ -f .env ]] || { echo "Falta $DIR/.env (ENV_NAME, APP_HOST, POSTGRES_PASSWORD, AUTH_SECRET)" >&2; exit 1; }
 echo "IMAGE_TAG=${IMAGE_TAG}" > image.env
 
 compose() {

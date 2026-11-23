@@ -112,7 +112,7 @@ export async function addSessionExercises(
 }
 
 // Quita un ejercicio del día. Si ya tiene series registradas no se quita, para
-// no perder datos (las series se gestionan en la sesión activa, paso 11).
+// no perder datos (las series se registran dentro de cada ejercicio del día).
 export async function removeSessionExercise(formData: FormData) {
   const user = await getCurrentUser();
   const id = idSchema.safeParse(formData.get("id"));

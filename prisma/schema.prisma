@@ -1,4 +1,4 @@
-// Esquema de datos de TrackApp (ver CLAUDE.md, sección 4).
+// Esquema de datos de TrackApp.
 // Regla de aislamiento total: toda entidad pertenece (directa o indirectamente) a un User.
 
 generator client {
