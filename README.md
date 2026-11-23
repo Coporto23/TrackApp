@@ -25,6 +25,7 @@ Aplicación web **mobile-first** para registrar la **sobrecarga progresiva** en 
 - Registro con email y contraseña, con inicio de sesión automático.
 - Cada cuenta recibe una lista base de ejercicios (26, orientados a un split de 5 días) que puede renombrar o archivar.
 - **Aislamiento total por usuario**: ningún dato se comparte entre cuentas.
+- **Límite de intentos**: tras varios inicios de sesión fallidos (por cuenta o por IP) o demasiados registros desde una misma IP, se bloquean temporalmente los nuevos intentos.
 
 ### Ejercicios
 - Listado alfabético con buscador (ignora tildes y mayúsculas).

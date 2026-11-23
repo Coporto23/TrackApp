@@ -39,6 +39,11 @@ export function RegisterForm() {
           errors={state?.fieldErrors?.confirmPassword}
           required
         />
+        {state?.error && (
+          <p role="alert" className="text-sm text-blood">
+            {state.error}
+          </p>
+        )}
         <button type="submit" className="btn-ember" disabled={pending}>
           {pending ? "Forjando cuenta…" : "Crear cuenta"}
         </button>
