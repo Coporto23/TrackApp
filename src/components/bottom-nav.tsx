@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, type ComponentType, type SVGProps } from "react";
-import { BonfireIcon, CalendarIcon, ChartIcon, HelmIcon } from "./icons";
+import { BonfireIcon, CalendarIcon, ChartIcon, MenuIcon } from "./icons";
 
 type NavItem = {
-  href: "/" | "/calendario" | "/dashboard" | "/perfil";
+  href: "/" | "/calendario" | "/dashboard" | "/opciones";
   label: string;
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
 };
@@ -15,7 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Inicio", Icon: BonfireIcon },
   { href: "/calendario", label: "Calendario", Icon: CalendarIcon },
   { href: "/dashboard", label: "Dashboard", Icon: ChartIcon },
-  { href: "/perfil", label: "Perfil", Icon: HelmIcon },
+  { href: "/opciones", label: "Más", Icon: MenuIcon },
 ];
 
 // Ejercicios y Rutinas se abren desde Inicio, así que cuentan como esa pestaña.
